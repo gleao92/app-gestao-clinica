@@ -3,6 +3,7 @@ import pandas as pd
 from supabase import create_client, Client
 import urllib.parse
 import time
+import requests  # Importação vital para conectar com a API do WhatsApp
 
 st.set_page_config(
     page_title="Gestão Clínica Inteligente", 
@@ -72,11 +73,49 @@ def init_connection():
 
 supabase: Client = init_connection()
 
-# --- FUNÇÃO DO ROBÔ DE WHATSAPP (RODA EM SEGUNDO PLANO) ---
-def disparar_whatsapp_background(nome_paciente, telefone, mensagem):
-    st.toast("🤖 Robô SaaS: Conectando ao servidor...", icon="📡")
-    time.sleep(1)
-    st.toast(f"💬 Mensagem enviada para {nome_paciente}!", icon="✅")
+# --- DISPARADOR REAL DE WHATSAPP EM SEGUNDO PLANO ---
+def disparar_whatsapp_real(nome_paciente, telefone, mensagem):
+    """
+    Conecta o sistema a um Gateway de WhatsApp para envios automáticos e invisíveis.
+    """
+    try:
+        # Puxa as configurações seguras dos Secrets do Streamlit
+        url_gateway = st.secrets["WPP_API_URL"]
+        token_gateway = st.secrets.get("WPP_API_KEY", "")
+        
+        # Limpa o número do telefone deixando apenas dígitos
+        numero_limpo = "".join(filter(str.isdigit, str(telefone)))
+        
+        # Garante o código do país (Ex: Brasil = 55)
+        if not numero_limpo.startswith("55") and len(numero_limpo) >= 10:
+            numero_limpo = "55" + numero_limpo
+            
+        headers = {
+            "Content-Type": "application/json",
+            "apikey": token_gateway,
+            "Authorization": f"Bearer {token_gateway}"
+        }
+        
+        # Payload flexível adaptado para os principais gateways do mercado
+        payload = {
+            "number": numero_limpo,
+            "phone": numero_limpo,
+            "message": mensagem,
+            "text": mensagem
+        }
+        
+        st.toast("📡 Robô SaaS: Enviando notificação automática...", icon="🤖")
+        
+        # Disparo HTTP em background de forma assíncrona para o cliente
+        resposta = requests.post(url_gateway, json=payload, headers=headers, timeout=8)
+        
+        if resposta.status_code in [200, 201]:
+            st.toast(f"💬 WhatsApp enviado com sucesso para {nome_paciente}!", icon="✅")
+        else:
+            st.toast(f"⚠️ Gateway respondeu com erro: {resposta.status_code}", icon="🛑")
+            
+    except Exception as e:
+        st.toast(f"❌ Falha crítica no motor de WhatsApp: {str(e)}", icon="💥")
 
 # =========================================================================
 # FLUXO 1: PÁGINA PÚBLICA DE AUTO-AGENDAMENTO
@@ -258,8 +297,13 @@ else:
                             supabase.table("agenda").insert({"clinica_id": st.session_state.clinica_id, "horario": horario_vago, "paciente_nome": substituto['paciente_nome'], "status": "Confirmado"}).execute()
                             supabase.table("fila_espera").delete().eq("id", substituto['id']).execute()
                             
-                            msg_automacao = f"Olá {substituto['paciente_nome']}! Um horário vagou às {horario_vago}. Encaixado!"
-                            disparar_whatsapp_background(substituto['paciente_nome'], substituto['telefone'], msg_automacao)
+                            # DISPARO 100% AUTOMÁTICO VIA API (Sem abrir abas ou precisar de cliques humanos)
+                            msg_automacao = (
+                                f"Olá {substituto['paciente_nome']}! Um horário acabou de vagar na clínica "
+                                f"e o nosso sistema confirmou seu encaixe automático para hoje às {horario_vago}. "
+                                f"Caso mude de ideia, responda esta mensagem."
+                            )
+                            disparar_whatsapp_real(substituto['paciente_nome'], substituto['telefone'], msg_automacao)
                             
                             st.success(f"✅ Horário das {horario_vago} repassado para {substituto['paciente_nome']}!")
                             time.sleep(1.5)
