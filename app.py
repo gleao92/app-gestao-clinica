@@ -145,16 +145,39 @@ else:
             simbolo_escolhido = simbolos[tipo_alerta]
             
             descricao_alerta = st.text_area("Instruções Adicionais (Opcional):", "Por favor, mantenha a distância. A equipe de manutenção já foi acionada para resolver a situação.")
-            
-        with col_preview:
+            with col_preview:
             st.write("**Pré-visualização para Impressão:**")
-            # Usando HTML/CSS para criar uma placa com design de alerta
+            
+            # CSS mágico que esconde o site na hora de imprimir + HTML da Placa
             st.markdown(f"""
-            <div style="border: 6px solid #d9534f; padding: 40px; text-align: center; border-radius: 12px; background-color: #fdf2f2;">
-                <h1 style="font-size: 70px; margin: 0; color: #d9534f;">{simbolo_escolhido}</h1>
-                <h1 style="color: #d9534f; font-family: 'Arial Black', sans-serif; font-size: 40px; text-transform: uppercase;">{tipo_alerta}</h1>
-                <p style="font-size: 24px; font-weight: bold; color: #333; margin-top: 20px;">{descricao_alerta}</p>
+            <style>
+            @media print {{
+                body * {{
+                    visibility: hidden;
+                }}
+                #area-placa, #area-placa * {{
+                    visibility: visible;
+                }}
+                #area-placa {{
+                    position: absolute;
+                    left: 0;
+                    top: 0;
+                    width: 100%;
+                    height: 100%;
+                    margin: 0;
+                    padding: 40px;
+                    background-color: white;
+                }}
+            }}
+            </style>
+            
+            <div id="area-placa" style="border: 12px solid #d9534f; padding: 60px; text-align: center; border-radius: 15px; background-color: #fdf2f2; min-height: 80vh; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                <h1 style="font-size: 130px; margin: 0; color: #d9534f; line-height: 1;">{simbolo_escolhido}</h1>
+                <h1 style="color: #d9534f; font-family: 'Arial Black', sans-serif; font-size: 55px; text-transform: uppercase; margin-top: 20px; line-height: 1.1;">{tipo_alerta}</h1>
+                <p style="font-size: 32px; font-weight: bold; color: #333; margin-top: 50px; line-height: 1.4;">{descricao_alerta}</p>
             </div>
             """, unsafe_allow_html=True)
+            
+            st.info("💡 **Dica de Uso:** Pressione **Ctrl + P** no teclado para imprimir esta placa em tamanho A4 e afixar imediatamente no local do incidente.")
             
             st.info("💡 **Dica de Uso:** Pressione **Ctrl + P** no teclado para imprimir esta placa em tamanho A4 e afixar imediatamente no local do incidente.")
