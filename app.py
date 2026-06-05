@@ -8,12 +8,10 @@ st.set_page_config(page_title="Gestão Clínica Inteligente", layout="wide", ini
 # --- CUSTOMIZAÇÃO DE FRONT-END (CSS MÁGICO) ---
 st.markdown("""
 <style>
-    /* Esconde o menu do Streamlit, o rodapé e o cabeçalho para parecer um app nativo */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
     
-    /* Estilo Premium para os Botões do Streamlit */
     div.stButton > button:first-child {
         background-color: #0052cc;
         color: white;
@@ -31,14 +29,12 @@ st.markdown("""
         color: white;
     }
 
-    /* Estilo para as caixas de aviso (Info/Success/Warning) - Fila de Espera */
     div[data-testid="stAlert"] {
         border-radius: 10px;
         box-shadow: 0 2px 5px rgba(0,0,0,0.05);
         border: 1px solid #e0e0e0;
     }
     
-    /* Abas Superiores Mais Modernas */
     .stTabs [data-baseweb="tab-list"] {
         gap: 15px;
     }
@@ -74,7 +70,7 @@ if 'autenticado' not in st.session_state:
 
 # --- TELA DE LOGIN ---
 if not st.session_state.autenticado:
-    st.write("<br><br><br>", unsafe_allow_html=True) # Dá um espaço no topo
+    st.write("<br><br><br>", unsafe_allow_html=True)
     col_espaco1, col_login, col_espaco2 = st.columns([1, 2, 1])
     
     with col_login:
@@ -103,7 +99,7 @@ if not st.session_state.autenticado:
 # --- SISTEMA PRINCIPAL (PÓS-LOGIN) ---
 else:
     with st.sidebar:
-        st.image("https://cdn-icons-png.flaticon.com/512/2966/2966327.png", width=60) # Ícone de Clínica Genérico
+        st.image("https://cdn-icons-png.flaticon.com/512/2966/2966327.png", width=60)
         st.markdown(f"<h3>Olá, {st.session_state.usuario_nome}</h3>", unsafe_allow_html=True)
         st.divider()
         if st.button("Sair do Sistema", use_container_width=True):
@@ -113,11 +109,12 @@ else:
 
     st.markdown("<h2 style='color: #333;'>🏥 Painel de Gestão Inteligente</h2>", unsafe_allow_html=True)
     
-    # Criando as 3 Abas
-    aba_dashboard, aba_agenda, aba_facilities = st.tabs([
+    # Criando as 4 Abas agora
+    aba_dashboard, aba_agenda, aba_facilities, aba_config = st.tabs([
         "📊 Dashboard Financeiro", 
         "📅 Gestão de Agenda", 
-        "⚠️ Facilities e Segurança"
+        "⚠️ Facilities",
+        "⚙️ Configurações"
     ])
     
     # === ABA 1: DASHBOARD FINANCEIRO ===
@@ -260,3 +257,48 @@ else:
             </script>
             """
             st.components.v1.html(html_impressao, height=450)
+
+    # === ABA 4: CONFIGURAÇÕES E EQUIPE ===
+    with aba_config:
+        st.subheader("👥 Gestão de Equipe e Acessos")
+        st.write("Adicione novos recepcionistas ou gestores para acessarem o sistema da sua clínica.")
+        
+        col_add, col_lista = st.columns([1, 1])
+        
+        with col_add:
+            st.markdown("**Cadastrar Novo Usuário**")
+            with st.form("form_novo_usuario"):
+                novo_nome = st.text_input("Nome Completo (Ex: Dr. Carlos, Maria Recepcionista)")
+                novo_email = st.text_input("E-mail de Acesso")
+                nova_senha = st.text_input("Senha", type="password")
+                submit_usuario = st.form_submit_button("Criar Conta", type="primary", use_container_width=True)
+                
+                if submit_usuario:
+                    if novo_nome and novo_email and nova_senha:
+                        # Verifica se o e-mail já existe
+                        busca_email = supabase.table("usuarios").select("email").eq("email", novo_email).execute()
+                        if len(busca_email.data) > 0:
+                            st.error("❌ Este e-mail já está cadastrado no sistema.")
+                        else:
+                            # Cria o usuário herdando o ID da clínica atual
+                            supabase.table("usuarios").insert({
+                                "clinica_id": st.session_state.clinica_id,
+                                "nome": novo_nome,
+                                "email": novo_email,
+                                "senha": nova_senha
+                            }).execute()
+                            st.success(f"✅ Conta de '{novo_nome}' criada com sucesso!")
+                            # O st.rerun vai atualizar a tabela ao lado instantaneamente
+                    else:
+                        st.warning("⚠️ Preencha todos os campos antes de salvar.")
+                        
+        with col_lista:
+            st.markdown("**Equipe Ativa**")
+            # Busca todos os usuários apenas da clínica atual
+            usuarios_da_clinica = supabase.table("usuarios").select("nome, email").eq("clinica_id", st.session_state.clinica_id).execute()
+            
+            if len(usuarios_da_clinica.data) > 0:
+                df_usuarios = pd.DataFrame(usuarios_da_clinica.data)
+                # Renomeando as colunas para ficar mais bonito na tela
+                df_usuarios = df_usuarios.rename(columns={"nome": "Nome do Profissional", "email": "E-mail de Acesso"})
+                st.dataframe(df_usuarios, hide_index=True, use_container_width=True)
