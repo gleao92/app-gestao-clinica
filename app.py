@@ -121,6 +121,7 @@ else:
                 st.write("Nenhum paciente na fila.")
 
     # === ABA 3: FACILITIES E SEGURANÇA ===
+    # === ABA 3: FACILITIES E SEGURANÇA ===
     with aba_facilities:
         st.subheader("Gerador de Sinalização de Emergência")
         st.write("Crie avisos visuais de alta prioridade para impressão imediata, garantindo a segurança dos pacientes.")
@@ -145,10 +146,7 @@ else:
             simbolo_escolhido = simbolos[tipo_alerta]
             
             descricao_alerta = st.text_area("Instruções Adicionais (Opcional):", "Por favor, mantenha a distância. A equipe de manutenção já foi acionada para resolver a situação.")
-            hite;
-                }}
-            }}
-            </style>
+            
         with col_preview:
             st.write("**Pré-visualização para Impressão:**")
             
@@ -182,3 +180,5 @@ else:
             </div>
             """, unsafe_allow_html=True)
             
+            st.info("💡 **Dica de Uso:** Pressione **Ctrl + P** no teclado para imprimir esta placa em tamanho A4 e afixar imediatamente no local do incidente.")
+        
