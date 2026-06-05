@@ -23,12 +23,25 @@ st.markdown("""
 
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    header {visibility: hidden;}
 
-    /* Sidebar */
+    /* Sidebar — garantir que aparece e não some */
     section[data-testid="stSidebar"] {
         background: #0a0f1e !important;
         border-right: 1px solid rgba(255,255,255,0.06);
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        min-width: 240px;
+    }
+    section[data-testid="stSidebar"] > div {
+        display: block !important;
+        visibility: visible !important;
+    }
+    /* Botão de colapsar a sidebar */
+    button[data-testid="collapsedControl"] {
+        display: flex !important;
+        visibility: visible !important;
+        color: #94a3b8 !important;
     }
     section[data-testid="stSidebar"] * {
         color: #e2e8f0 !important;
