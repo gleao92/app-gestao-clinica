@@ -3,7 +3,7 @@ import pandas as pd
 from supabase import create_client, Client
 import urllib.parse
 import time
-import requests  # Importação vital para conectar com a API do WhatsApp
+import requests
 
 st.set_page_config(
     page_title="Gestão Clínica Inteligente", 
@@ -75,18 +75,11 @@ supabase: Client = init_connection()
 
 # --- DISPARADOR REAL DE WHATSAPP EM SEGUNDO PLANO ---
 def disparar_whatsapp_real(nome_paciente, telefone, mensagem):
-    """
-    Conecta o sistema a um Gateway de WhatsApp para envios automáticos e invisíveis.
-    """
     try:
-        # Puxa as configurações seguras dos Secrets do Streamlit
         url_gateway = st.secrets["WPP_API_URL"]
         token_gateway = st.secrets.get("WPP_API_KEY", "")
         
-        # Limpa o número do telefone deixando apenas dígitos
         numero_limpo = "".join(filter(str.isdigit, str(telefone)))
-        
-        # Garante o código do país (Ex: Brasil = 55)
         if not numero_limpo.startswith("55") and len(numero_limpo) >= 10:
             numero_limpo = "55" + numero_limpo
             
@@ -96,7 +89,6 @@ def disparar_whatsapp_real(nome_paciente, telefone, mensagem):
             "Authorization": f"Bearer {token_gateway}"
         }
         
-        # Payload flexível adaptado para os principais gateways do mercado
         payload = {
             "number": numero_limpo,
             "phone": numero_limpo,
@@ -105,15 +97,12 @@ def disparar_whatsapp_real(nome_paciente, telefone, mensagem):
         }
         
         st.toast("📡 Robô SaaS: Enviando notificação automática...", icon="🤖")
-        
-        # Disparo HTTP em background de forma assíncrona para o cliente
         resposta = requests.post(url_gateway, json=payload, headers=headers, timeout=8)
         
         if resposta.status_code in [200, 201]:
             st.toast(f"💬 WhatsApp enviado com sucesso para {nome_paciente}!", icon="✅")
         else:
             st.toast(f"⚠️ Gateway respondeu com erro: {resposta.status_code}", icon="🛑")
-            
     except Exception as e:
         st.toast(f"❌ Falha crítica no motor de WhatsApp: {str(e)}", icon="💥")
 
@@ -182,7 +171,10 @@ else:
                 submit = st.form_submit_button("Acessar Painel", type="primary", use_container_width=True)
                 
                 if submit:
-                    resposta = supabase.table("usuarios").select("*").eq("email", email).eq("senha", senha).execute()
+                    # TRATAMENTO ANTI-ERRO: Remove espaços e joga tudo para minúsculo
+                    email_limpo = email.strip().lower()
+                    
+                    resposta = supabase.table("usuarios").select("*").eq("email", email_limpo).eq("senha", senha).execute()
                     
                     if len(resposta.data) > 0:
                         usuario = resposta.data[0]
@@ -190,7 +182,8 @@ else:
                         st.session_state.clinica_id = usuario['clinica_id']
                         st.session_state.usuario_nome = usuario['nome']
                         
-                        if email == "teste@alfa.com":
+                        # Definição forçada do Admin mestre
+                        if email_limpo == "teste@alfa.com":
                             st.session_state.perfil = "Gestor"
                         else:
                             perfil_db = usuario.get('perfil')
@@ -210,6 +203,7 @@ else:
             st.markdown(f"<p style='color: gray; margin-top:-15px;'>Perfil: {st.session_state.perfil}</p>", unsafe_allow_html=True)
             st.divider()
             
+            # FILTRO DAS ABAS BASEADO NO PERFIL
             if st.session_state.perfil == 'Gestor':
                 opcoes_menu = ["📊 Dashboard Financeiro", "📅 Gestão de Agenda", "⚠️ Facilities", "⚙️ Configurações"]
             else:
@@ -288,7 +282,7 @@ else:
                     st.markdown("### 🔁 Recuperador de Vagas")
                     paciente_cancelar = st.selectbox("Registrar cancelamento e repassar horário de:", agenda_df['paciente_nome'])
                     
-                    if st.button("Substituir Paciente Automaticamente", type="primary"):
+                    if st.button("Substituir Paciente Automatically", type="primary"):
                         if len(fila_lista) > 0:
                             substituto = fila_lista[0]
                             horario_vago = agenda_df.loc[agenda_df['paciente_nome'] == paciente_cancelar, 'horario'].values[0]
@@ -297,12 +291,7 @@ else:
                             supabase.table("agenda").insert({"clinica_id": st.session_state.clinica_id, "horario": horario_vago, "paciente_nome": substituto['paciente_nome'], "status": "Confirmado"}).execute()
                             supabase.table("fila_espera").delete().eq("id", substituto['id']).execute()
                             
-                            # DISPARO 100% AUTOMÁTICO VIA API (Sem abrir abas ou precisar de cliques humanos)
-                            msg_automacao = (
-                                f"Olá {substituto['paciente_nome']}! Um horário acabou de vagar na clínica "
-                                f"e o nosso sistema confirmou seu encaixe automático para hoje às {horario_vago}. "
-                                f"Caso mude de ideia, responda esta mensagem."
-                            )
+                            msg_automacao = f"Olá {substituto['paciente_nome']}! Um horário vagou às {horario_vago}. Encaixado!"
                             disparar_whatsapp_real(substituto['paciente_nome'], substituto['telefone'], msg_automacao)
                             
                             st.success(f"✅ Horário das {horario_vago} repassado para {substituto['paciente_nome']}!")
@@ -407,7 +396,7 @@ else:
                             supabase.table("usuarios").insert({
                                 "clinica_id": st.session_state.clinica_id,
                                 "nome": novo_nome,
-                                "email": novo_email,
+                                "email": novo_email.strip().lower(),
                                 "senha": nova_senha,
                                 "perfil": novo_perfil
                             }).execute()
