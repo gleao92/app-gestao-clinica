@@ -3,7 +3,59 @@ import pandas as pd
 from supabase import create_client, Client
 import urllib.parse
 
-st.set_page_config(page_title="Gestão Clínica Inteligente", layout="wide")
+st.set_page_config(page_title="Gestão Clínica Inteligente", layout="wide", initial_sidebar_state="expanded")
+
+# --- CUSTOMIZAÇÃO DE FRONT-END (CSS MÁGICO) ---
+st.markdown("""
+<style>
+    /* Esconde o menu do Streamlit, o rodapé e o cabeçalho para parecer um app nativo */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    
+    /* Estilo Premium para os Botões do Streamlit */
+    div.stButton > button:first-child {
+        background-color: #0052cc;
+        color: white;
+        border-radius: 8px;
+        font-weight: bold;
+        border: none;
+        padding: 0.5rem 1rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s ease;
+    }
+    div.stButton > button:first-child:hover {
+        background-color: #003d99;
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
+        transform: translateY(-2px);
+        color: white;
+    }
+
+    /* Estilo para as caixas de aviso (Info/Success/Warning) - Fila de Espera */
+    div[data-testid="stAlert"] {
+        border-radius: 10px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        border: 1px solid #e0e0e0;
+    }
+    
+    /* Abas Superiores Mais Modernas */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 15px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 50px;
+        border-radius: 8px 8px 0px 0px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+        font-weight: 600;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #f0f6ff;
+        border-bottom: 3px solid #0052cc !important;
+        color: #0052cc;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # --- CONEXÃO COM O BANCO DE DADOS ---
 @st.cache_resource
@@ -22,16 +74,19 @@ if 'autenticado' not in st.session_state:
 
 # --- TELA DE LOGIN ---
 if not st.session_state.autenticado:
+    st.write("<br><br><br>", unsafe_allow_html=True) # Dá um espaço no topo
     col_espaco1, col_login, col_espaco2 = st.columns([1, 2, 1])
     
     with col_login:
-        st.title("🔐 Acesso ao Sistema")
-        # O TEXTO DE TESTE FOI REMOVIDO DAQUI PARA UM VISUAL MAIS PROFISSIONAL
+        st.markdown("<h1 style='text-align: center; color: #0052cc;'>Acesso ao Sistema</h1>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: #666;'>Insira suas credenciais para gerir sua clínica.</p>", unsafe_allow_html=True)
+        st.write("---")
         
         with st.form("login_form"):
             email = st.text_input("E-mail:")
             senha = st.text_input("Senha:", type="password")
-            submit = st.form_submit_button("Entrar", type="primary", use_container_width=True)
+            st.write("<br>", unsafe_allow_html=True)
+            submit = st.form_submit_button("Acessar Painel", type="primary", use_container_width=True)
             
             if submit:
                 resposta = supabase.table("usuarios").select("*").eq("email", email).eq("senha", senha).execute()
@@ -48,14 +103,15 @@ if not st.session_state.autenticado:
 # --- SISTEMA PRINCIPAL (PÓS-LOGIN) ---
 else:
     with st.sidebar:
-        st.write(f"Conectado como: **{st.session_state.usuario_nome}**")
+        st.image("https://cdn-icons-png.flaticon.com/512/2966/2966327.png", width=60) # Ícone de Clínica Genérico
+        st.markdown(f"<h3>Olá, {st.session_state.usuario_nome}</h3>", unsafe_allow_html=True)
         st.divider()
         if st.button("Sair do Sistema", use_container_width=True):
             st.session_state.autenticado = False
             st.session_state.clinica_id = None
             st.rerun()
 
-    st.title("🏥 Painel de Gestão Inteligente")
+    st.markdown("<h2 style='color: #333;'>🏥 Painel de Gestão Inteligente</h2>", unsafe_allow_html=True)
     
     # Criando as 3 Abas
     aba_dashboard, aba_agenda, aba_facilities = st.tabs([
@@ -82,7 +138,7 @@ else:
         }).set_index("Mês")
         st.bar_chart(dados_grafico)
 
-    # === ABA 2: GESTÃO DE AGENDA (COM AUTOMAÇÃO WHATSAPP) ===
+    # === ABA 2: GESTÃO DE AGENDA ===
     with aba_agenda:
         resposta_agenda = supabase.table("agenda").select("*").eq("clinica_id", st.session_state.clinica_id).execute()
         agenda_df = pd.DataFrame(resposta_agenda.data)
@@ -92,10 +148,9 @@ else:
         
         col1, col2 = st.columns([2, 1])
         with col1:
-            st.subheader("📅 Agenda de Hoje")
+            st.markdown("### 📅 Agenda de Hoje")
             if not agenda_df.empty:
                 st.write("---")
-                # Cabeçalho da lista
                 c_h, c_n, c_s, c_a = st.columns([1, 2, 1.5, 1.5])
                 c_h.write("**Horário**")
                 c_n.write("**Paciente**")
@@ -103,7 +158,6 @@ else:
                 c_a.write("**Ação Rápida**")
                 st.write("---")
                 
-                # Linhas da agenda com botão dinâmico
                 for index, row in agenda_df.iterrows():
                     c_horario, c_nome, c_status, c_acao = st.columns([1, 2, 1.5, 1.5])
                     c_horario.write(row['horario'])
@@ -114,15 +168,14 @@ else:
                     else:
                         c_status.markdown("🟡 Pendente")
                     
-                    # Motor do WhatsApp (Cria mensagem pré-preenchida)
                     mensagem_zap = f"Olá {row['paciente_nome']}, somos da Clínica. Podemos confirmar sua consulta de hoje às {row['horario']}?"
                     texto_codificado = urllib.parse.quote(mensagem_zap)
-                    link_wpp = f"https://wa.me/5511999999999?text={texto_codificado}" # Número de teste
+                    link_wpp = f"https://wa.me/5511999999999?text={texto_codificado}" 
                     
-                    c_acao.markdown(f'<a href="{link_wpp}" target="_blank" style="text-decoration: none; background-color: #25D366; color: white; padding: 6px 15px; border-radius: 5px; font-weight: bold; font-size: 13px;">💬 Contatar</a>', unsafe_allow_html=True)
+                    c_acao.markdown(f'<a href="{link_wpp}" target="_blank" style="text-decoration: none; background-color: #25D366; color: white; padding: 8px 15px; border-radius: 5px; font-weight: bold; font-size: 13px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">💬 Contatar</a>', unsafe_allow_html=True)
                 
                 st.write("---")
-                st.subheader("🔁 Recuperador de Vagas")
+                st.markdown("### 🔁 Recuperador de Vagas")
                 paciente_cancelar = st.selectbox("Registrar cancelamento e repassar horário de:", agenda_df['paciente_nome'])
                 
                 if st.button("Substituir Paciente Automaticamente", type="primary"):
@@ -141,10 +194,10 @@ else:
                 st.write("Não há consultas agendadas.")
 
         with col2:
-            st.subheader("📋 Fila de Espera")
+            st.markdown("### 📋 Fila de Espera")
             if len(fila_lista) > 0:
                 for pessoa in fila_lista:
-                    st.info(f"**{pessoa['paciente_nome']}**\n📞 {pessoa['telefone']}")
+                    st.info(f"👤 **{pessoa['paciente_nome']}**\n\n📞 {pessoa['telefone']}")
             else:
                 st.write("Nenhum paciente na fila.")
 
