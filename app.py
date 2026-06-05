@@ -121,7 +121,7 @@ else:
                 st.write("Nenhum paciente na fila.")
 
     # === ABA 3: FACILITIES E SEGURANÇA ===
-    # === ABA 3: FACILITIES E SEGURANÇA ===
+  # === ABA 3: FACILITIES E SEGURANÇA ===
     with aba_facilities:
         st.subheader("Gerador de Sinalização de Emergência")
         st.write("Crie avisos visuais de alta prioridade para impressão imediata, garantindo a segurança dos pacientes.")
@@ -136,7 +136,6 @@ else:
                 "Aviso: Equipamento em Manutenção"
             ])
             
-            # Mapeamento de símbolos automáticos para cada situação
             simbolos = {
                 "Cuidado: Vidro Quebrado": "⚠️ 💥",
                 "Atenção: Piso Molhado": "⚠️ 💧",
@@ -148,37 +147,43 @@ else:
             descricao_alerta = st.text_area("Instruções Adicionais (Opcional):", "Por favor, mantenha a distância. A equipe de manutenção já foi acionada para resolver a situação.")
             
         with col_preview:
-            st.write("**Pré-visualização para Impressão:**")
+            st.write("**Pré-visualização e Impressão:**")
             
-            # CSS mágico que esconde o site na hora de imprimir + HTML da Placa
-            st.markdown(f"""
-            <style>
-            @media print {{
-                body * {{
-                    visibility: hidden;
-                }}
-                #area-placa, #area-placa * {{
-                    visibility: visible;
-                }}
-                #area-placa {{
-                    position: absolute;
-                    left: 0;
-                    top: 0;
-                    width: 100%;
-                    height: 100%;
-                    margin: 0;
-                    padding: 40px;
-                    background-color: white;
-                }}
-            }}
-            </style>
-            
-            <div id="area-placa" style="border: 12px solid #d9534f; padding: 60px; text-align: center; border-radius: 15px; background-color: #fdf2f2; min-height: 80vh; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                <h1 style="font-size: 130px; margin: 0; color: #d9534f; line-height: 1;">{simbolo_escolhido}</h1>
-                <h1 style="color: #d9534f; font-family: 'Arial Black', sans-serif; font-size: 55px; text-transform: uppercase; margin-top: 20px; line-height: 1.1;">{tipo_alerta}</h1>
-                <p style="font-size: 32px; font-weight: bold; color: #333; margin-top: 50px; line-height: 1.4;">{descricao_alerta}</p>
+            # Criando a placa e o botão de imprimir usando HTML + JavaScript integrados
+            html_impressao = f"""
+            <div id="placa" style="border: 10px solid #d9534f; padding: 30px; text-align: center; border-radius: 15px; background-color: #fdf2f2; font-family: 'Arial', sans-serif;">
+                <div style="font-size: 70px; margin: 0; line-height: 1;">{simbolo_escolhido}</div>
+                <div style="color: #d9534f; font-weight: 900; font-size: 35px; text-transform: uppercase; margin-top: 15px;">{tipo_alerta}</div>
+                <div style="font-size: 20px; font-weight: bold; color: #333; margin-top: 25px;">{descricao_alerta}</div>
             </div>
-            """, unsafe_allow_html=True)
             
-            st.info("💡 **Dica de Uso:** Pressione **Ctrl + P** no teclado para imprimir esta placa em tamanho A4 e afixar imediatamente no local do incidente.")
-        
+            <div style="text-align: center; margin-top: 25px;">
+                <button onclick="imprimirPlaca()" style="padding: 15px 30px; font-size: 18px; font-weight: bold; background-color: #d9534f; color: white; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
+                    🖨️ CLIQUE AQUI PARA IMPRIMIR
+                </button>
+            </div>
+
+            <script>
+            function imprimirPlaca() {{
+                // Pega apenas o conteúdo visual da placa
+                var conteudo = document.getElementById('placa').innerHTML;
+                // Abre uma janela invisível só para imprimir
+                var janela = window.open('', '', 'height=800,width=800');
+                janela.document.write('<html><head><title>Imprimir Sinalização</title>');
+                // Adiciona o estilo perfeito para a folha A4
+                janela.document.write('<style>');
+                janela.document.write('body {{ display: flex; justify-content: center; align-items: center; height: 90vh; margin: 0; font-family: sans-serif; }}');
+                janela.document.write('#container {{ border: 15px solid #d9534f; padding: 60px; text-align: center; border-radius: 20px; background-color: #fdf2f2; width: 80%; }}');
+                janela.document.write('</style></head><body>');
+                janela.document.write('<div id="container">' + conteudo + '</div>');
+                janela.document.write('</body></html>');
+                janela.document.close();
+                janela.focus();
+                // Chama a impressão e fecha a janela mágica
+                setTimeout(function() {{ janela.print(); janela.close(); }}, 500);
+            }}
+            </script>
+            """
+            
+            # Renderiza o HTML dentro do Streamlit
+            st.components.v1.html(html_impressao, height=450)
