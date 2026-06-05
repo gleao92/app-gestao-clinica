@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 st.set_page_config(
     page_title="ClinicFlow — Gestão Inteligente",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="auto"  # auto = expandida no desktop, colapsada no mobile
 )
 
 st.markdown("""
@@ -184,6 +184,120 @@ st.markdown("""
         align-items: center;
         justify-content: space-between;
         box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+
+    /* =====================
+       RESPONSIVO — MOBILE
+    ===================== */
+    @media (max-width: 768px) {
+
+        /* Padding geral menor */
+        .block-container {
+            padding: 1rem 0.8rem !important;
+        }
+
+        /* Sidebar fecha por padrão no mobile — o botão hamburger fica visível */
+        section[data-testid="stSidebar"] {
+            min-width: unset !important;
+        }
+
+        /* Colunas viram blocos empilhados */
+        [data-testid="column"] {
+            width: 100% !important;
+            flex: 1 1 100% !important;
+            min-width: 100% !important;
+        }
+
+        /* Métricas em grade 2x2 */
+        [data-testid="metric-container"] {
+            padding: 0.9rem 1rem;
+        }
+        [data-testid="stMetricValue"] {
+            font-size: 1.5rem !important;
+        }
+
+        /* Top bar empilhada */
+        .top-bar {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 4px;
+            padding: 0.9rem 1rem;
+        }
+
+        /* Botões largura total */
+        div.stButton > button:first-child {
+            width: 100%;
+            padding: 0.7rem 1rem;
+            font-size: 0.95rem;
+        }
+
+        /* Tabela com scroll horizontal */
+        .stDataFrame {
+            overflow-x: auto !important;
+        }
+
+        /* Títulos menores */
+        h2 { font-size: 1.2rem !important; }
+        h3 { font-size: 1.05rem !important; }
+
+        /* Pills menores */
+        .pill-green, .pill-yellow, .pill-red {
+            font-size: 0.72rem;
+            padding: 2px 8px;
+        }
+
+        /* Login centralizado com padding */
+        .stForm {
+            padding: 0 0.5rem;
+        }
+
+        /* Gráficos não transbordam */
+        [data-testid="stArrowVegaLiteChart"],
+        [data-testid="stVegaLiteChart"] {
+            overflow-x: auto !important;
+        }
+
+        /* Fila de espera cards */
+        div[style*="border-radius:12px"] {
+            margin-bottom: 0.5rem;
+        }
+
+        /* Code block não transborda */
+        code, pre {
+            font-size: 0.75rem !important;
+            word-break: break-all;
+        }
+
+        /* Selectbox largura total */
+        .stSelectbox {
+            width: 100% !important;
+        }
+
+        /* Inputs touch-friendly */
+        .stTextInput input {
+            font-size: 1rem !important;
+            padding: 0.6rem 0.8rem !important;
+            min-height: 44px !important;
+        }
+
+        /* Âncoras (botões WhatsApp/Confirmar) maiores no touch */
+        a[style*="border-radius"] {
+            padding: 8px 14px !important;
+            font-size: 0.85rem !important;
+            display: inline-block;
+            margin-bottom: 4px;
+        }
+    }
+
+    /* Telas muito pequenas (< 400px) */
+    @media (max-width: 400px) {
+        .block-container {
+            padding: 0.8rem 0.5rem !important;
+        }
+        [data-testid="stMetricValue"] {
+            font-size: 1.3rem !important;
+        }
+        h2 { font-size: 1.1rem !important; }
     }
 </style>
 """, unsafe_allow_html=True)
