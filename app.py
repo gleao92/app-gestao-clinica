@@ -280,14 +280,13 @@ else:
                 else:
                     st.write("Não há consultas agendadas.")
 
-            with col2:
+           with col2:
                 st.markdown("### 📋 Fila de Espera")
-                # Link útil para o gestor copiar e enviar para os pacientes
+                # Caixa de código com botão de cópia automático!
                 link_publico = "https://share.streamlit.io/seu-usuario/seu-repositorio/main/app.py?view=agendar"
-                st.text_input("🔗 Link de Auto-Agendamento para clientes:", value=link_publico, disabled=True)
-                st.caption("Dica: Coloque este link na bio do Instagram da clínica para captação automática.")
-                st.write("")
-                
+                st.markdown("**🔗 Link de Auto-Agendamento para clientes:**")
+                st.code(link_publico, language="text")
+                st.caption("Dica: Clique no ícone de copiar no canto da caixa acima e coloque na bio do Instagram da clínica.")     
                 if len(fila_lista) > 0:
                     for pessoa in fila_lista:
                         st.info(f"👤 **{pessoa['paciente_nome']}**\n\n📞 {pessoa['telefone']}")
