@@ -25,7 +25,6 @@ if not st.session_state.autenticado:
     
     with col_login:
         st.title("🔐 Acesso ao Sistema")
-        st.write("Utilize os dados de teste para entrar (E-mail: teste@alfa.com | Senha: 123)")
         
         with st.form("login_form"):
             email = st.text_input("E-mail:")
