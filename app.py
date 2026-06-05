@@ -159,4 +159,97 @@ else:
             st.markdown("### 📅 Agenda de Hoje")
             if not agenda_df.empty:
                 st.write("---")
-                c_h, c_n, c_s, c
+                c_h, c_n, c_s, c_a = st.columns([1, 2, 1.5, 1.5])
+                c_h.write("**Horário**")
+                c_n.write("**Paciente**")
+                c_s.write("**Status**")
+                c_a.write("**Ação Rápida**")
+                st.write("---")
+                
+                for index, row in agenda_df.iterrows():
+                    c_horario, c_nome, c_status, c_acao = st.columns([1, 2, 1.5, 1.5])
+                    c_horario.write(row['horario'])
+                    c_nome.write(row['paciente_nome'])
+                    c_status.markdown("🟢 Confirmado" if row['status'] == 'Confirmado' else "🟡 Pendente")
+                    
+                    link_wpp = f"https://wa.me/5511999999999?text={urllib.parse.quote(f'Olá {row['paciente_nome']}, confirmamos sua consulta às {row['horario']}?')}" 
+                    c_acao.markdown(f'<a href="{link_wpp}" target="_blank" style="text-decoration: none; background-color: #25D366; color: white; padding: 8px 15px; border-radius: 5px; font-weight: bold; font-size: 13px;">💬 Contatar</a>', unsafe_allow_html=True)
+                
+                st.write("---")
+                paciente_cancelar = st.selectbox("Registrar cancelamento e repassar horário de:", agenda_df['paciente_nome'])
+                if st.button("Substituir Paciente Automaticamente", type="primary"):
+                    if len(fila_lista) > 0:
+                        substituto = fila_lista[0]
+                        horario_vago = agenda_df.loc[agenda_df['paciente_nome'] == paciente_cancelar, 'horario'].values[0]
+                        supabase.table("agenda").delete().eq("paciente_nome", paciente_cancelar).execute()
+                        supabase.table("agenda").insert({"clinica_id": st.session_state.clinica_id, "horario": horario_vago, "paciente_nome": substituto['paciente_nome'], "status": "Pendente"}).execute()
+                        supabase.table("fila_espera").delete().eq("id", substituto['id']).execute()
+                        st.success(f"✅ Horário das {horario_vago} repassado para {substituto['paciente_nome']}!")
+                        st.rerun()
+                    else:
+                        st.warning("Fila de espera vazia. O horário ficará vago.")
+            else:
+                st.write("Não há consultas agendadas.")
+
+        with col2:
+            st.markdown("### 📋 Fila de Espera")
+            if len(fila_lista) > 0:
+                for pessoa in fila_lista:
+                    st.info(f"👤 **{pessoa['paciente_nome']}**\n\n📞 {pessoa['telefone']}")
+            else:
+                st.write("Nenhum paciente na fila.")
+
+    # === ABA: FACILITIES E SEGURANÇA (TODOS VEEM) ===
+    with aba_facilities:
+        st.subheader("Gerador de Sinalização")
+        col_form, col_preview = st.columns([1, 1])
+        with col_form:
+            tipo_alerta = st.selectbox("Selecione a ocorrência:", ["Cuidado: Vidro Quebrado", "Atenção: Piso Molhado"])
+            simbolo_escolhido = "⚠️ 💥" if "Vidro" in tipo_alerta else "⚠️ 💧"
+            descricao_alerta = st.text_area("Instruções:", "Por favor, mantenha a distância.")
+        with col_preview:
+            html_impressao = f"""
+            <div id="placa" style="border: 10px solid #d9534f; padding: 30px; text-align: center; border-radius: 15px; background-color: #fdf2f2; font-family: 'Arial', sans-serif;">
+                <div style="font-size: 70px; margin: 0; line-height: 1;">{simbolo_escolhido}</div>
+                <div style="color: #d9534f; font-weight: 900; font-size: 35px; text-transform: uppercase;">{tipo_alerta}</div>
+                <div style="font-size: 20px; font-weight: bold; color: #333;">{descricao_alerta}</div>
+            </div>
+            """
+            st.components.v1.html(html_impressao, height=300)
+
+    # === ABA: CONFIGURAÇÕES (SÓ GESTOR VÊ) ===
+    if st.session_state.perfil == 'Gestor':
+        with aba_config:
+            st.subheader("👥 Gestão de Equipe e Acessos")
+            col_add, col_lista = st.columns([1, 1])
+            with col_add:
+                st.markdown("**Cadastrar Novo Usuário**")
+                with st.form("form_novo_usuario"):
+                    novo_nome = st.text_input("Nome Completo")
+                    novo_email = st.text_input("E-mail de Acesso")
+                    nova_senha = st.text_input("Senha", type="password")
+                    novo_perfil = st.selectbox("Nível de Acesso da Conta", ["Recepcao", "Gestor"])
+                    
+                    submit_usuario = st.form_submit_button("Criar Conta", type="primary", use_container_width=True)
+                    if submit_usuario:
+                        busca_email = supabase.table("usuarios").select("email").eq("email", novo_email).execute()
+                        if len(busca_email.data) > 0:
+                            st.error("❌ Este e-mail já existe.")
+                        elif novo_nome and novo_senha:
+                            supabase.table("usuarios").insert({
+                                "clinica_id": st.session_state.clinica_id,
+                                "nome": novo_nome,
+                                "email": novo_email,
+                                "senha": nova_senha,
+                                "perfil": novo_perfil
+                            }).execute()
+                            st.success(f"✅ Conta criada!")
+                            st.rerun() # Atualiza a tabela na mesma hora
+                        else:
+                            st.warning("⚠️ Preencha os campos.")
+            with col_lista:
+                st.markdown("**Equipe Ativa**")
+                usuarios_da_clinica = supabase.table("usuarios").select("nome, email, perfil").eq("clinica_id", st.session_state.clinica_id).execute()
+                if len(usuarios_da_clinica.data) > 0:
+                    df_usuarios = pd.DataFrame(usuarios_da_clinica.data).rename(columns={"nome": "Nome", "email": "E-mail", "perfil": "Perfil"})
+                    st.dataframe(df_usuarios, hide_index=True, use_container_width=True)
