@@ -154,3 +154,15 @@ else:
                 <h1 style="font-size: 70px; margin: 0; color: #d9534f;">{simbolo_escolhido}</h1>
                 <h1 style="color: #d9534f; font-family: 'Arial Black', sans-serif; font-size: 40px; text-transform: uppercase;">{tipo_alerta}</h1>
                 <p style="font-size: 24px; font-weight: bold; color: #333; margin-top: 20px;">{descricao
+            with col_preview:
+            st.write("**Pré-visualização para Impressão:**")
+            # Usando HTML/CSS para criar uma placa com design de alerta
+            st.markdown(f"""
+            <div style="border: 6px solid #d9534f; padding: 40px; text-align: center; border-radius: 12px; background-color: #fdf2f2;">
+                <h1 style="font-size: 70px; margin: 0; color: #d9534f;">{simbolo_escolhido}</h1>
+                <h1 style="color: #d9534f; font-family: 'Arial Black', sans-serif; font-size: 40px; text-transform: uppercase;">{tipo_alerta}</h1>
+                <p style="font-size: 24px; font-weight: bold; color: #333; margin-top: 20px;">{descricao_alerta}</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.info("💡 **Dica de Uso:** Pressione **Ctrl + P** no teclado para imprimir esta placa em tamanho A4 e afixar imediatamente no local do incidente.")
