@@ -12,7 +12,26 @@ st.markdown("""
     footer {visibility: hidden;}
     header {visibility: hidden;}
     
-    /* Estilo Premium para os Botões Padrões (Azul) */
+    /* ---------------------------------------------------
+       NOVO: MELHORIA DE UI/UX NO MENU LATERAL (SIDEBAR)
+       --------------------------------------------------- */
+    section[data-testid="stSidebar"] div[role="radiogroup"] {
+        gap: 1.5rem !important; /* Aumenta drasticamente o respiro entre os itens */
+        margin-top: 10px;
+        padding-left: 5px;
+    }
+    section[data-testid="stSidebar"] div[role="radiogroup"] label p {
+        font-size: 1.05rem !important; /* Deixa a fonte do menu um pouquinho maior e mais premium */
+        color: #333333;
+    }
+    /* Muda a cor da "bolinha" selecionada para o nosso azul corporativo */
+    div[data-baseweb="radio"] > div:first-child {
+        background-color: #0052cc !important;
+    }
+
+    /* ---------------------------------------------------
+       Estilo Premium para os Botões
+       --------------------------------------------------- */
     div.stButton > button:first-child {
         background-color: #0052cc;
         color: white;
@@ -30,10 +49,10 @@ st.markdown("""
         color: white;
     }
 
-    /* ESTILO ESPECÍFICO: Botão de Sair no Menu Lateral (Vermelho) */
+    /* Botão de Sair no Menu Lateral (Vermelho) */
     section[data-testid="stSidebar"] div.stButton > button:first-child {
         background-color: #dc3545 !important;
-        margin-top: 50px; /* Empurra um pouco mais para baixo */
+        margin-top: 50px; 
     }
     section[data-testid="stSidebar"] div.stButton > button:first-child:hover {
         background-color: #c82333 !important;
@@ -113,20 +132,16 @@ else:
         st.markdown(f"<p style='color: gray; margin-top:-15px;'>Perfil: {st.session_state.perfil}</p>", unsafe_allow_html=True)
         st.divider()
         
-        # Define as opções do menu dependendo do Perfil
         if st.session_state.perfil == 'Gestor':
             opcoes_menu = ["📊 Dashboard Financeiro", "📅 Gestão de Agenda", "⚠️ Facilities", "⚙️ Configurações"]
         else:
             opcoes_menu = ["📅 Gestão de Agenda", "⚠️ Facilities"]
             
-        # O novo Menu Vertical
         st.markdown("**Navegação**")
         menu_selecionado = st.radio("", opcoes_menu, label_visibility="collapsed")
         
-        # Quebras de linha para empurrar o botão vermelho para o fundo da tela
         st.write("<br><br><br><br><br><br>", unsafe_allow_html=True)
         
-        # Botão de Sair do Sistema (Ficará vermelho por causa do CSS lá no topo)
         if st.button("Sair do Sistema", use_container_width=True):
             st.session_state.autenticado = False
             st.session_state.clinica_id = None
