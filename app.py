@@ -1,93 +1,100 @@
+```python
 import streamlit as st
 import pandas as pd
-import urllib.parse # Biblioteca nativa para formatar o texto para links da web
+from supabase import create_client, Client
+import urllib.parse
 
-st.set_page_config(page_title="Gestor de Agenda Inteligente", layout="centered")
+st.set_page_config(page_title="Gestão Clínica Inteligente", layout="centered")
 
-# --- 1. Simulando o nosso Banco de Dados ---
-if 'agenda' not in st.session_state:
-    st.session_state.agenda = pd.DataFrame({
-        'Horário': ['08:00', '09:00', '10:00', '11:00'],
-        'Paciente': ['Carlos Silva', 'Ana Oliveira', 'Roberto Souza', 'Fernanda Lima'],
-        'Status': ['Confirmado', 'Pendente', 'Confirmado', 'Pendente']
-    })
+# --- CONEXÃO COM O BANCO DE DADOS ---
+@st.cache_resource
+def init_connection():
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
 
-# Agora a fila de espera guarda o nome e o telemóvel (com o código do país e área)
-if 'fila_espera' not in st.session_state:
-    st.session_state.fila_espera = [
-        {'nome': 'Mariana Santos', 'telefone': '5562999998888'},
-        {'nome': 'João Pedro', 'telefone': '5562999997777'}
-    ]
+supabase: Client = init_connection()
 
-# Variável para guardar os dados da mensagem atual do WhatsApp
-if 'notificacao_pendente' not in st.session_state:
-    st.session_state.notificacao_pendente = None
+# --- ESTADO DE LOGIN ---
+if 'autenticado' not in st.session_state:
+    st.session_state.autenticado = False
+    st.session_state.clinica_id = None
+    st.session_state.usuario_nome = ""
 
-# --- 2. Interface do Sistema ---
-st.title("🏥 Recuperador Inteligente de No-Show")
-st.write("Gerencie cancelamentos e preencha horários vagos automaticamente através do WhatsApp.")
-st.divider()
-
-col1, col2 = st.columns([2, 1])
-
-with col1:
-    st.subheader("📅 Agenda de Hoje")
-    st.dataframe(st.session_state.agenda, use_container_width=True, hide_index=True)
+# --- TELA DE LOGIN ---
+if not st.session_state.autenticado:
+    st.title("🔐 Acesso ao Sistema")
+    st.write("Utilize os dados de teste para entrar (E-mail: teste@alfa.com | Senha: 123)")
     
-    st.write("---")
-    st.write("**Simular um Cancelamento:**")
-    
-    # Dropdown para escolher quem cancelou
-    paciente_cancelar = st.selectbox("Selecione o paciente que acabou de cancelar/desmarcar:", st.session_state.agenda['Paciente'])
-    
-    if st.button("Registrar Cancelamento e Buscar Substituto", type="primary"):
-        if len(st.session_state.fila_espera) > 0:
-            # 1. Descobre o horário que ficou vago
-            horario_vago = st.session_state.agenda.loc[st.session_state.agenda['Paciente'] == paciente_cancelar, 'Horário'].values[0]
-            
-            # 2. Puxa o primeiro paciente da fila de espera automaticamente
-            substituto = st.session_state.fila_espera.pop(0)
-            
-            # 3. Atualiza a tabela da agenda
-            st.session_state.agenda.loc[st.session_state.agenda['Paciente'] == paciente_cancelar, 'Paciente'] = substituto['nome']
-            st.session_state.agenda.loc[st.session_state.agenda['Paciente'] == substituto['nome'], 'Status'] = 'Avisando Paciente...'
-            
-            # 4. Cria a mensagem personalizada e formata para o link do WhatsApp
-            texto_mensagem = f"Olá {substituto['nome']}, tudo bem? Aqui é da clínica. Uma vaga ficou disponível hoje no horário das {horario_vago}. Teria interesse em confirmar este horário?"
-            texto_codificado = urllib.parse.quote(texto_mensagem) # Transforma espaços em %20, etc.
-            
-            # Link oficial do WhatsApp (wa.me)
-            link_final = f"https://wa.me/{substituto['telefone']}?text={texto_codificado}"
-            
-            # Guarda os dados para exibir o botão de disparo no ecrã
-            st.session_state.notificacao_pendente = {
-                'nome': substituto['nome'],
-                'horario': horario_vago,
-                'link': link_final
-            }
-            st.rerun()
-        else:
-            st.session_state.agenda.loc[st.session_state.agenda['Paciente'] == paciente_cancelar, 'Paciente'] = '--- VAGO ---'
-            st.session_state.agenda.loc[st.session_state.agenda['Paciente'] == '--- VAGO ---', 'Status'] = '-'
-            st.session_state.notificacao_pendente = None
-            st.rerun()
-
-    # O "EFEITO UAU": Se houver uma notificação ativa, exibe o botão do WhatsApp
-    if st.session_state.notificacao_pendente:
-        st.write("---")
-        st.info(f"👉 **Próxima Ação Necessária:** Notificar {st.session_state.notificacao_pendente['nome']} sobre a vaga das {st.session_state.notificacao_pendente['horario']}.")
+    with st.form("login_form"):
+        email = st.text_input("E-mail:")
+        senha = st.text_input("Senha:", type="password")
+        submit = st.form_submit_button("Entrar", type="primary")
         
-        # Botão especial do Streamlit que abre links externos
-        st.link_button(
-            label="💬 Enviar Mensagem via WhatsApp Web",
-            url=st.session_state.notificacao_pendente['link'],
-            use_container_width=True
-        )
+        if submit:
+            # Verifica as credenciais no banco de dados
+            resposta = supabase.table("usuarios").select("*").eq("email", email).eq("senha", senha).execute()
+            
+            if len(resposta.data) > 0:
+                usuario = resposta.data[0]
+                st.session_state.autenticado = True
+                st.session_state.clinica_id = usuario['clinica_id']
+                st.session_state.usuario_nome = usuario['nome']
+                st.rerun()
+            else:
+                st.error("E-mail ou senha incorretos.")
 
-with col2:
-    st.subheader("📋 Fila de Espera")
-    if len(st.session_state.fila_espera) > 0:
-        for pessoa in st.session_state.fila_espera:
-            st.warning(f"**{pessoa['nome']}**\n📞 {pessoa['telefone']}")
-    else:
-        st.write("Nenhum paciente na fila.")
+# --- SISTEMA PRINCIPAL (PÓS-LOGIN) ---
+else:
+    with st.sidebar:
+        st.write(f"Conectado como: **{st.session_state.usuario_nome}**")
+        st.divider()
+        if st.button("Sair do Sistema"):
+            st.session_state.autenticado = False
+            st.session_state.clinica_id = None
+            st.rerun()
+
+    st.title("🏥 Recuperador Inteligente de No-Show")
+    st.divider()
+    
+    # Puxa a agenda e fila de espera EXCLUSIVAS desta clínica
+    resposta_agenda = supabase.table("agenda").select("*").eq("clinica_id", st.session_state.clinica_id).execute()
+    agenda_df = pd.DataFrame(resposta_agenda.data)
+    
+    resposta_fila = supabase.table("fila_espera").select("*").eq("clinica_id", st.session_state.clinica_id).order("posicao").execute()
+    fila_lista = resposta_fila.data
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.subheader("📅 Agenda de Hoje")
+        if not agenda_df.empty:
+            st.dataframe(agenda_df[['horario', 'paciente_nome', 'status']], use_container_width=True, hide_index=True)
+            
+            st.write("---")
+            paciente_cancelar = st.selectbox("Registrar cancelamento para:", agenda_df['paciente_nome'])
+            
+            if st.button("Confirmar Cancelamento e Buscar Substituto", type="primary"):
+                if len(fila_lista) > 0:
+                    substituto = fila_lista[0]
+                    horario_vago = agenda_df.loc[agenda_df['paciente_nome'] == paciente_cancelar, 'horario'].values[0]
+                    
+                    # Atualiza os dados permanentemente no Supabase
+                    supabase.table("agenda").delete().eq("paciente_nome", paciente_cancelar).execute()
+                    supabase.table("agenda").insert({"clinica_id": st.session_state.clinica_id, "horario": horario_vago, "paciente_nome": substituto['paciente_nome'], "status": "Avisando Paciente..."}).execute()
+                    supabase.table("fila_espera").delete().eq("id", substituto['id']).execute()
+                    
+                    st.success(f"✅ Horário das {horario_vago} repassado para {substituto['paciente_nome']}!")
+                    st.rerun()
+                else:
+                    st.warning("Fila de espera vazia. O horário ficará vago.")
+        else:
+            st.write("Não há consultas agendadas.")
+
+    with col2:
+        st.subheader("📋 Fila de Espera")
+        if len(fila_lista) > 0:
+            for pessoa in fila_lista:
+                st.info(f"**{pessoa['paciente_nome']}**\n📞 {pessoa['telefone']}")
+        else:
+            st.write("Nenhum paciente na fila.")
