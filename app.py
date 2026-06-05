@@ -219,81 +219,73 @@ else:
             st.bar_chart(dados_grafico)
 
         # === TELA 2: GESTÃO DE AGENDA ===
-        elif menu_selecionado == "📅 Gestão de Agenda":
-            resposta_agenda = supabase.table("agenda").select("*").eq("clinica_id", st.session_state.clinica_id).execute()
-            agenda_df = pd.DataFrame(resposta_agenda.data)
-            
-            resposta_fila = supabase.table("fila_espera").select("*").eq("clinica_id", st.session_state.clinica_id).order("posicao").execute()
-            fila_lista = response_fila_data = resposta_fila.data
-            
-            col1, col2 = st.columns([2, 1])
-            with col1:
-                st.markdown("### 📅 Agenda de Hoje")
-                if not agenda_df.empty:
-                    st.write("---")
-                    c_h, c_n, c_s, c_a = st.columns([1, 2, 1.5, 1.5])
-                    c_h.write("**Horário**")
-                    c_n.write("**Paciente**")
-                    c_s.write("**Status**")
-                    c_a.write("**Ação Rápida**")
-                    st.write("---")
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            st.markdown("### 📅 Agenda de Hoje")
+            if not agenda_df.empty:
+                st.write("---")
+                c_h, c_n, c_s, c_a = st.columns([1, 2, 1.5, 1.5])
+                c_h.write("**Horário**")
+                c_n.write("**Paciente**")
+                c_s.write("**Status**")
+                c_a.write("**Ação Rápida**")
+                st.write("---")
+                
+                for index, row in agenda_df.iterrows():
+                    c_horario, c_nome, c_status, c_acao = st.columns([1, 2, 1.5, 1.5])
+                    c_horario.write(row['horario'])
+                    c_nome.write(row['paciente_nome'])
                     
-                    for index, row in agenda_df.iterrows():
-                        c_horario, c_nome, c_status, c_acao = st.columns([1, 2, 1.5, 1.5])
-                        c_horario.write(row['horario'])
-                        c_nome.write(row['paciente_nome'])
-                        
-                        if row['status'] == 'Confirmado':
-                            c_status.markdown("🟢 Confirmado")
-                        else:
-                            c_status.markdown("🟡 Pendente")
-                        
-                        mensagem_zap = f"Olá {row['paciente_nome']}, somos da Clínica. Podemos confirmar sua consulta de hoje às {row['horario']}?"
-                        texto_codificado = urllib.parse.quote(mensagem_zap)
-                        link_wpp = f"https://wa.me/5511999999999?text={texto_codificado}" 
-                        
-                        c_acao.markdown(f'<a href="{link_wpp}" target="_blank" style="text-decoration: none; background-color: #25D366; color: white; padding: 8px 15px; border-radius: 5px; font-weight: bold; font-size: 13px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">💬 Contatar</a>', unsafe_allow_html=True)
+                    if row['status'] == 'Confirmado':
+                        c_status.markdown("🟢 Confirmado")
+                    else:
+                        c_status.markdown("🟡 Pendente")
                     
-                    st.write("---")
-                    st.markdown("### 🔁 Recuperador de Vagas")
-                    paciente_cancelar = st.selectbox("Registrar cancelamento e repassar horário de:", agenda_df['paciente_nome'])
+                    mensagem_zap = f"Olá {row['paciente_nome']}, somos da Clínica. Podemos confirmar sua consulta de hoje às {row['horario']}?"
+                    texto_codificado = urllib.parse.quote(mensagem_zap)
+                    link_wpp = f"https://wa.me/5511999999999?text={texto_codificado}" 
                     
-                    if st.button("Substituir Paciente Automaticamente", type="primary"):
-                        if len(fila_lista) > 0:
-                            substituto = fila_lista[0]
-                            horario_vago = agenda_df.loc[agenda_df['paciente_nome'] == paciente_cancelar, 'horario'].values[0]
-                            
-                            # Transações no Banco de Dados
-                            supabase.table("agenda").delete().eq("paciente_nome", paciente_cancelar).execute()
-                            supabase.table("agenda").insert({"clinica_id": st.session_state.clinica_id, "horario": horario_vago, "paciente_nome": substituto['paciente_nome'], "status": "Confirmado"}).execute()
-                            supabase.table("fila_espera").delete().eq("id", substituto['id']).execute()
-                            
-                            # AUTOMAÇÃO WHATSAPP SEM MÃOS: Executa invisivelmente nos bastidores!
-                            msg_automacao = f"Olá {substituto['paciente_nome']}! Um horário vagou e conseguimos encaixar você hoje às {horario_vago}. Confirmado!"
-                            disparar_whatsapp_background(substituto['paciente_nome'], substituto['telefone'], msg_automacao)
-                            
-                            st.success(f"✅ Horário das {horario_vago} repassado para {substituto['paciente_nome']}!")
-                            time.sleep(1.5)
-                            st.rerun()
-                        else:
-                            st.warning("Fila de espera vazia. O horário ficará vago.")
-                else:
-                    st.write("Não há consultas agendadas.")
+                    c_acao.markdown(f'<a href="{link_wpp}" target="_blank" style="text-decoration: none; background-color: #25D366; color: white; padding: 8px 15px; border-radius: 5px; font-weight: bold; font-size: 13px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">💬 Contatar</a>', unsafe_allow_html=True)
+                
+                st.write("---")
+                st.markdown("### 🔁 Recuperador de Vagas")
+                paciente_cancelar = st.selectbox("Registrar cancelamento e repassar horário de:", agenda_df['paciente_nome'])
+                
+                if st.button("Substituir Paciente Automaticamente", type="primary"):
+                    if len(fila_lista) > 0:
+                        substituto = fila_lista[0]
+                        horario_vago = agenda_df.loc[agenda_df['paciente_nome'] == paciente_cancelar, 'horario'].values[0]
+                        
+                        supabase.table("agenda").delete().eq("paciente_nome", paciente_cancelar).execute()
+                        supabase.table("agenda").insert({"clinica_id": st.session_state.clinica_id, "horario": horario_vago, "paciente_nome": substituto['paciente_nome'], "status": "Confirmado"}).execute()
+                        supabase.table("fila_espera").delete().eq("id", substituto['id']).execute()
+                        
+                        msg_automacao = f"Olá {substituto['paciente_nome']}! Um horário vagou e conseguimos encaixar você hoje às {horario_vago}. Confirmado!"
+                        disparar_whatsapp_background(substituto['paciente_nome'], substituto['telefone'], msg_automacao)
+                        
+                        st.success(f"✅ Horário das {horario_vago} repassado para {substituto['paciente_nome']}!")
+                        time.sleep(1.5)
+                        st.rerun()
+                    else:
+                        st.warning("Fila de espera vazia. O horário ficará vago.")
+            else:
+                st.write("Não há consultas agendadas.")
 
-           with col2:
-                st.markdown("### 📋 Fila de Espera")
-                # Caixa de código com botão de cópia automático!
-                link_publico = "https://share.streamlit.io/seu-usuario/seu-repositorio/main/app.py?view=agendar"
-                st.markdown("**🔗 Link de Auto-Agendamento para clientes:**")
-                st.code(link_publico, language="text")
-                st.caption("Dica: Clique no ícone de copiar no canto da caixa acima e coloque na bio do Instagram da clínica.")     
-                if len(fila_lista) > 0:
-                    for pessoa in fila_lista:
-                        st.info(f"👤 **{pessoa['paciente_nome']}**\n\n📞 {pessoa['telefone']}")
-                else:
-                    st.write("Nenhum paciente na fila.")
-
-        # === TELA 3: FACILITIES E SEGURANÇA ===
+        with col2:
+            st.markdown("### 📋 Fila de Espera")
+            # Caixa de código com botão de cópia automático!
+            link_publico = "https://share.streamlit.io/seu-usuario/seu-repositorio/main/app.py?view=agendar"
+            st.markdown("**🔗 Link de Auto-Agendamento:**")
+            st.code(link_publico, language="text")
+            st.caption("Dica: Clique no ícone de copiar acima e coloque na bio do Instagram da clínica.")
+            st.write("")
+            
+            if len(fila_lista) > 0:
+                for pessoa in fila_lista:
+                    st.info(f"👤 **{pessoa['paciente_nome']}**\n\n📞 {pessoa['telefone']}")
+            else:
+                st.write("Nenhum paciente na fila.")        # === TELA 3: FACILITIES E SEGURANÇA ===
         elif menu_selecionado == "⚠️ Facilities":
             st.subheader("Gerador de Sinalização de Emergência")
             st.write("Crie avisos visuais de alta prioridade para impressão imediata.")
