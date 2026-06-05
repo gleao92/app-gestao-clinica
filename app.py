@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
+import urllib.parse
 
 st.set_page_config(page_title="Gestão Clínica Inteligente", layout="wide")
 
@@ -25,6 +26,7 @@ if not st.session_state.autenticado:
     
     with col_login:
         st.title("🔐 Acesso ao Sistema")
+        # O TEXTO DE TESTE FOI REMOVIDO DAQUI PARA UM VISUAL MAIS PROFISSIONAL
         
         with st.form("login_form"):
             email = st.text_input("E-mail:")
@@ -53,7 +55,7 @@ else:
             st.session_state.clinica_id = None
             st.rerun()
 
-    st.title("🏥 Painel de Gestão e Segurança")
+    st.title("🏥 Painel de Gestão Inteligente")
     
     # Criando as 3 Abas
     aba_dashboard, aba_agenda, aba_facilities = st.tabs([
@@ -80,7 +82,7 @@ else:
         }).set_index("Mês")
         st.bar_chart(dados_grafico)
 
-    # === ABA 2: GESTÃO DE AGENDA ===
+    # === ABA 2: GESTÃO DE AGENDA (COM AUTOMAÇÃO WHATSAPP) ===
     with aba_agenda:
         resposta_agenda = supabase.table("agenda").select("*").eq("clinica_id", st.session_state.clinica_id).execute()
         agenda_df = pd.DataFrame(resposta_agenda.data)
@@ -92,19 +94,46 @@ else:
         with col1:
             st.subheader("📅 Agenda de Hoje")
             if not agenda_df.empty:
-                st.dataframe(agenda_df[['horario', 'paciente_nome', 'status']], use_container_width=True, hide_index=True)
                 st.write("---")
-                paciente_cancelar = st.selectbox("Registrar cancelamento para:", agenda_df['paciente_nome'])
+                # Cabeçalho da lista
+                c_h, c_n, c_s, c_a = st.columns([1, 2, 1.5, 1.5])
+                c_h.write("**Horário**")
+                c_n.write("**Paciente**")
+                c_s.write("**Status**")
+                c_a.write("**Ação Rápida**")
+                st.write("---")
                 
-                if st.button("Confirmar Cancelamento e Buscar Substituto", type="primary"):
+                # Linhas da agenda com botão dinâmico
+                for index, row in agenda_df.iterrows():
+                    c_horario, c_nome, c_status, c_acao = st.columns([1, 2, 1.5, 1.5])
+                    c_horario.write(row['horario'])
+                    c_nome.write(row['paciente_nome'])
+                    
+                    if row['status'] == 'Confirmado':
+                        c_status.markdown("🟢 Confirmado")
+                    else:
+                        c_status.markdown("🟡 Pendente")
+                    
+                    # Motor do WhatsApp (Cria mensagem pré-preenchida)
+                    mensagem_zap = f"Olá {row['paciente_nome']}, somos da Clínica. Podemos confirmar sua consulta de hoje às {row['horario']}?"
+                    texto_codificado = urllib.parse.quote(mensagem_zap)
+                    link_wpp = f"https://wa.me/5511999999999?text={texto_codificado}" # Número de teste
+                    
+                    c_acao.markdown(f'<a href="{link_wpp}" target="_blank" style="text-decoration: none; background-color: #25D366; color: white; padding: 6px 15px; border-radius: 5px; font-weight: bold; font-size: 13px;">💬 Contatar</a>', unsafe_allow_html=True)
+                
+                st.write("---")
+                st.subheader("🔁 Recuperador de Vagas")
+                paciente_cancelar = st.selectbox("Registrar cancelamento e repassar horário de:", agenda_df['paciente_nome'])
+                
+                if st.button("Substituir Paciente Automaticamente", type="primary"):
                     if len(fila_lista) > 0:
                         substituto = fila_lista[0]
                         horario_vago = agenda_df.loc[agenda_df['paciente_nome'] == paciente_cancelar, 'horario'].values[0]
                         
                         supabase.table("agenda").delete().eq("paciente_nome", paciente_cancelar).execute()
-                        supabase.table("agenda").insert({"clinica_id": st.session_state.clinica_id, "horario": horario_vago, "paciente_nome": substituto['paciente_nome'], "status": "Avisando Paciente..."}).execute()
+                        supabase.table("agenda").insert({"clinica_id": st.session_state.clinica_id, "horario": horario_vago, "paciente_nome": substituto['paciente_nome'], "status": "Pendente"}).execute()
                         supabase.table("fila_espera").delete().eq("id", substituto['id']).execute()
-                        st.success(f"✅ Horário repassado para {substituto['paciente_nome']}!")
+                        st.success(f"✅ Horário das {horario_vago} repassado para {substituto['paciente_nome']}!")
                         st.rerun()
                     else:
                         st.warning("Fila de espera vazia. O horário ficará vago.")
@@ -120,7 +149,6 @@ else:
                 st.write("Nenhum paciente na fila.")
 
     # === ABA 3: FACILITIES E SEGURANÇA ===
-  # === ABA 3: FACILITIES E SEGURANÇA ===
     with aba_facilities:
         st.subheader("Gerador de Sinalização de Emergência")
         st.write("Crie avisos visuais de alta prioridade para impressão imediata, garantindo a segurança dos pacientes.")
@@ -148,7 +176,6 @@ else:
         with col_preview:
             st.write("**Pré-visualização e Impressão:**")
             
-            # Criando a placa e o botão de imprimir usando HTML + JavaScript integrados
             html_impressao = f"""
             <div id="placa" style="border: 10px solid #d9534f; padding: 30px; text-align: center; border-radius: 15px; background-color: #fdf2f2; font-family: 'Arial', sans-serif;">
                 <div style="font-size: 70px; margin: 0; line-height: 1;">{simbolo_escolhido}</div>
@@ -164,12 +191,9 @@ else:
 
             <script>
             function imprimirPlaca() {{
-                // Pega apenas o conteúdo visual da placa
                 var conteudo = document.getElementById('placa').innerHTML;
-                // Abre uma janela invisível só para imprimir
                 var janela = window.open('', '', 'height=800,width=800');
                 janela.document.write('<html><head><title>Imprimir Sinalização</title>');
-                // Adiciona o estilo perfeito para a folha A4
                 janela.document.write('<style>');
                 janela.document.write('body {{ display: flex; justify-content: center; align-items: center; height: 90vh; margin: 0; font-family: sans-serif; }}');
                 janela.document.write('#container {{ border: 15px solid #d9534f; padding: 60px; text-align: center; border-radius: 20px; background-color: #fdf2f2; width: 80%; }}');
@@ -178,11 +202,8 @@ else:
                 janela.document.write('</body></html>');
                 janela.document.close();
                 janela.focus();
-                // Chama a impressão e fecha a janela mágica
                 setTimeout(function() {{ janela.print(); janela.close(); }}, 500);
             }}
             </script>
             """
-            
-            # Renderiza o HTML dentro do Streamlit
             st.components.v1.html(html_impressao, height=450)
