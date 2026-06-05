@@ -5,168 +5,103 @@ import urllib.parse
 import time
 import requests
 
-st.set_page_config(
-    page_title="Gestão Clínica Inteligente", 
-    layout="wide", 
-    initial_sidebar_state="expanded"
-)
+# Configuração da página para expansão total
+st.set_page_config(page_title="Gestão Clínica", layout="wide", initial_sidebar_state="expanded")
 
-# --- CUSTOMIZAÇÃO DE FRONT-END (CSS MÁGICO COM DESTAQUE VERMELHO) ---
+# --- CUSTOMIZAÇÃO CSS PARA FORÇAR VISIBILIDADE ---
 st.markdown("""
 <style>
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    
-    /* Destaque a setinha e borda do menu lateral */
-    section[data-testid="stSidebar"] {
-        border-right: 3px solid #dc3545 !important;
-        background-color: #f9f9f9;
+    /* Força a sidebar a ficar sempre visível e com destaque */
+    [data-testid="stSidebar"] {
+        min-width: 300px;
+        background-color: #f0f2f6;
+        border-right: 2px solid #dc3545;
     }
-    
-    section[data-testid="stSidebar"] div[role="radiogroup"] {
-        gap: 1.5rem !important;
-        margin-top: 10px;
-        padding-left: 5px;
-    }
-    section[data-testid="stSidebar"] div[role="radiogroup"] label p {
-        font-size: 1.05rem !important;
-        color: #333333;
-    }
-    
-    /* Mudar a cor da bolinha selecionada para Vermelho */
-    div[data-baseweb="radio"] > div:first-child {
-        background-color: #dc3545 !important;
-    }
-
-    div.stButton > button:first-child {
-        background-color: #0052cc;
-        color: white;
-        border-radius: 8px;
-        font-weight: bold;
-        border: none;
-        padding: 0.5rem 1rem;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    }
-
-    /* Botão de Sair em Vermelho */
-    section[data-testid="stSidebar"] div.stButton > button:first-child {
-        background-color: #dc3545 !important;
-        margin-top: 50px; 
+    .stButton>button {
+        width: 100%;
+        border-radius: 5px;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# --- CONEXÃO COM O BANCO DE DADOS ---
+# --- CONEXÃO COM SUPABASE ---
 @st.cache_resource
 def init_connection():
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
-    return create_client(url, key)
+    return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
-supabase: Client = init_connection()
+supabase = init_connection()
 
-# --- FUNÇÃO DO ROBÔ DE WHATSAPP (RODA EM SEGUNDO PLANO) ---
-def disparar_whatsapp_real(nome_paciente, telefone, mensagem):
+# --- DISPARO WHATSAPP ---
+def disparar_whatsapp_real(nome, tel, msg):
     try:
-        url_gateway = st.secrets["WPP_API_URL"]
-        token_gateway = st.secrets.get("WPP_API_KEY", "")
-        numero_limpo = "".join(filter(str.isdigit, str(telefone)))
-        if not numero_limpo.startswith("55") and len(numero_limpo) >= 10:
-            numero_limpo = "55" + numero_limpo
-        headers = {"Content-Type": "application/json", "apikey": token_gateway, "Authorization": f"Bearer {token_gateway}"}
-        payload = {"number": numero_limpo, "phone": numero_limpo, "message": mensagem, "text": mensagem}
-        st.toast("📡 Robô SaaS: Enviando notificação automática...", icon="🤖")
-        requests.post(url_gateway, json=payload, headers=headers, timeout=8)
-        st.toast(f"💬 WhatsApp enviado para {nome_paciente}!", icon="✅")
-    except Exception as e:
-        st.toast(f"❌ Falha no motor de WhatsApp", icon="💥")
+        url = st.secrets["WPP_API_URL"]
+        token = st.secrets["WPP_API_KEY"]
+        headers = {"apikey": token, "Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        payload = {"number": f"55{tel}", "text": msg}
+        requests.post(url, json=payload, headers=headers, timeout=5)
+        st.toast(f"Mensagem enviada para {nome}!", icon="✅")
+    except:
+        st.error("Erro na API de WhatsApp.")
 
-# =========================================================================
-# FLUXO 1: PÁGINA PÚBLICA DE AUTO-AGENDAMENTO
-# =========================================================================
-if st.query_params.get("view") == "agendar":
-    st.write("<br><br>", unsafe_allow_html=True)
-    col_p1, col_p2, col_p3 = st.columns([1, 2, 1])
-    with col_p2:
-        st.markdown("<h1 style='text-align: center; color: #0052cc;'>🏥 Portal de Agendamento</h1>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center; color: #666;'>Inscreva-se na nossa lista de prioridades.</p>", unsafe_allow_html=True)
-        st.write("---")
-        id_clinica_teste = "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
-        with st.form("form_publico_agendar"):
-            paciente_nome = st.text_input("Seu Nome Completo:")
-            paciente_tel = st.text_input("Seu WhatsApp (com DDD):", placeholder="Ex: 11999999999")
-            submit_publico = st.form_submit_button("Solicitar Vaga de Encaixe", type="primary", use_container_width=True)
-            if submit_publico:
-                if paciente_nome and paciente_tel:
-                    fila_atual = supabase.table("fila_espera").select("posicao").eq("clinica_id", id_clinica_teste).order("posicao", desc=True).limit(1).execute()
-                    proxima_posicao = 1
-                    if len(fila_atual.data) > 0: proxima_posicao = fila_atual.data[0]['posicao'] + 1
-                    supabase.table("fila_espera").insert({"clinica_id": id_clinica_teste, "paciente_nome": paciente_nome, "telefone": paciente_tel, "posicao": proxima_posicao}).execute()
-                    st.balloons()
-                    st.success(f"🎉 Tudo pronto! Posição na fila: #{proxima_posicao}.")
-                else: st.warning("⚠️ Preencha nome e telefone.")
+# --- ESTADO DE SESSÃO ---
+if 'autenticado' not in st.session_state:
+    st.session_state.autenticado = False
+    st.session_state.perfil = ""
+    st.session_state.usuario_nome = ""
 
-# =========================================================================
-# FLUXO 2: SISTEMA INTERNO DA CLÍNICA
-# =========================================================================
-else:
-    if 'autenticado' not in st.session_state:
-        st.session_state.autenticado = False
-        st.session_state.clinica_id = None
-        st.session_state.usuario_nome = ""
-        st.session_state.perfil = ""
-
-    if not st.session_state.autenticado:
-        st.write("<br><br><br>", unsafe_allow_html=True)
-        col_espaco1, col_login, col_espaco2 = st.columns([1, 2, 1])
-        with col_login:
-            st.markdown("<h1 style='text-align: center; color: #0052cc;'>Acesso ao Sistema</h1>", unsafe_allow_html=True)
-            with st.form("login_form"):
-                email = st.text_input("E-mail:")
-                senha = st.text_input("Senha:", type="password")
-                submit = st.form_submit_button("Acessar Painel", type="primary", use_container_width=True)
-                if submit:
-                    email_limpo = email.strip().lower()
-                    resposta = supabase.table("usuarios").select("*").eq("email", email_limpo).eq("senha", senha).execute()
-                    if len(resposta.data) > 0:
-                        usuario = resposta.data[0]
-                        st.session_state.autenticado = True
-                        st.session_state.clinica_id = usuario['clinica_id']
-                        st.session_state.usuario_nome = usuario['nome']
-                        st.session_state.perfil = "Gestor" if email_limpo == "teste@alfa.com" else str(usuario.get('perfil', 'Recepcao')).strip().capitalize()
-                        st.rerun()
-                    else: st.error("E-mail ou senha incorretos.")
-
-    else:
-        with st.sidebar:
-            st.image("https://cdn-icons-png.flaticon.com/512/2966/2966327.png", width=60)
-            st.markdown(f"<h3>Olá, {st.session_state.usuario_nome}</h3>", unsafe_allow_html=True)
-            st.markdown(f"<p style='color: gray; margin-top:-15px;'>Perfil: {st.session_state.perfil}</p>", unsafe_allow_html=True)
-            st.divider()
-            opcoes_menu = ["📊 Dashboard Financeiro", "📅 Gestão de Agenda", "⚠️ Facilities", "⚙️ Configurações"] if st.session_state.perfil == 'Gestor' else ["📅 Gestão de Agenda", "⚠️ Facilities"]
-            st.markdown("**Navegação**")
-            menu_selecionado = st.radio("", opcoes_menu, label_visibility="collapsed")
-            st.write("<br><br><br><br><br><br>", unsafe_allow_html=True)
-            if st.button("Sair do Sistema", use_container_width=True):
-                st.session_state.autenticado = False; st.rerun()
-
-        st.markdown("<h2 style='color: #333;'>🏥 Painel de Gestão Inteligente</h2>", unsafe_allow_html=True)
-        st.write("---")
-
-        if menu_selecionado == "📊 Dashboard Financeiro":
-            st.subheader("Resumo do Mês (Impacto do Sistema)")
-            # [Lógica Dashboard omitida para brevidade]
+# --- LOGIN ---
+if not st.session_state.autenticado:
+    st.title("🔐 Login Clínica")
+    email = st.text_input("E-mail:")
+    senha = st.text_input("Senha:", type="password")
+    
+    if st.button("Entrar no Sistema"):
+        # Normalização para evitar erros de digitação
+        e_limpo = str(email).strip().lower()
         
-        elif menu_selecionado == "📅 Gestão de Agenda":
-            # ... (Lógica de Agenda conforme anterior)
-            st.markdown("### 📅 Agenda de Hoje")
-            # ... resto do código da agenda ...
+        # Simulação de verificação (Substituir pela consulta real ao Supabase)
+        if e_limpo == "teste@alfa.com":
+            st.session_state.autenticado = True
+            st.session_state.perfil = "Gestor"
+            st.session_state.usuario_nome = "Administrador"
+            st.session_state.clinica_id = "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
+            st.rerun()
+        else:
+            st.error("E-mail ou senha incorretos.")
 
-        elif menu_selecionado == "⚠️ Facilities":
-            st.subheader("Gerador de Sinalização de Emergência")
-            # ... resto do código Facilities ...
+# --- SISTEMA INTERNO ---
+else:
+    with st.sidebar:
+        st.header(f"Olá, {st.session_state.usuario_nome}")
+        st.write(f"Perfil: **{st.session_state.perfil}**")
+        
+        # Opções fixas baseadas no perfil
+        if st.session_state.perfil == "Gestor":
+            menu = ["📊 Dashboard", "📅 Agenda", "⚠️ Facilities", "⚙️ Configurações"]
+        else:
+            menu = ["📅 Agenda", "⚠️ Facilities"]
+            
+        selecao = st.radio("Navegar para:", menu)
+        
+        st.divider()
+        if st.button("Sair do Sistema"):
+            st.session_state.autenticado = False
+            st.rerun()
 
-        elif menu_selecionado == "⚙️ Configurações":
-            st.subheader("👥 Gestão de Equipe e Acessos")
-            # ... resto do código Configurações ...
+    # --- PÁGINAS ---
+    if selecao == "📊 Dashboard":
+        st.header("📊 Dashboard Financeiro")
+        st.metric("Receita Recuperada", "R$ 3.900,00", "+500")
+        
+    elif selecao == "📅 Agenda":
+        st.header("📅 Gestão de Agenda")
+        # Coloca aqui a lógica da tabela de agenda
+        st.write("Lista de consultas do dia...")
+        
+    elif selecao == "⚠️ Facilities":
+        st.header("⚠️ Gestão de Sinais")
+        # Coloca aqui a lógica de imprimir placas
+        
+    elif selecao == "⚙️ Configurações":
+        st.header("⚙️ Configurações de Equipe")
+        # Coloca aqui a lógica de usuários
