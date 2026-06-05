@@ -12,6 +12,7 @@ st.markdown("""
     footer {visibility: hidden;}
     header {visibility: hidden;}
     
+    /* Estilo Premium para os Botões Padrões (Azul) */
     div.stButton > button:first-child {
         background-color: #0052cc;
         color: white;
@@ -29,24 +30,20 @@ st.markdown("""
         color: white;
     }
 
+    /* ESTILO ESPECÍFICO: Botão de Sair no Menu Lateral (Vermelho) */
+    section[data-testid="stSidebar"] div.stButton > button:first-child {
+        background-color: #dc3545 !important;
+        margin-top: 50px; /* Empurra um pouco mais para baixo */
+    }
+    section[data-testid="stSidebar"] div.stButton > button:first-child:hover {
+        background-color: #c82333 !important;
+    }
+
+    /* Estilo das caixas de alerta */
     div[data-testid="stAlert"] {
         border-radius: 10px;
         box-shadow: 0 2px 5px rgba(0,0,0,0.05);
         border: 1px solid #e0e0e0;
-    }
-    
-    .stTabs [data-baseweb="tab-list"] { gap: 15px; }
-    .stTabs [data-baseweb="tab"] {
-        height: 50px;
-        border-radius: 8px 8px 0px 0px;
-        padding-top: 10px;
-        padding-bottom: 10px;
-        font-weight: 600;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #f0f6ff;
-        border-bottom: 3px solid #0052cc !important;
-        color: #0052cc;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -92,7 +89,6 @@ if not st.session_state.autenticado:
                     st.session_state.clinica_id = usuario['clinica_id']
                     st.session_state.usuario_nome = usuario['nome']
                     
-                    # --- CHAVE MESTRA DO DESENVOLVEDOR ---
                     if email == "teste@alfa.com":
                         st.session_state.perfil = "Gestor"
                     else:
@@ -108,11 +104,29 @@ if not st.session_state.autenticado:
 
 # --- SISTEMA PRINCIPAL (PÓS-LOGIN) ---
 else:
+    # ==========================================
+    # MENU LATERAL (SIDEBAR)
+    # ==========================================
     with st.sidebar:
         st.image("https://cdn-icons-png.flaticon.com/512/2966/2966327.png", width=60)
         st.markdown(f"<h3>Olá, {st.session_state.usuario_nome}</h3>", unsafe_allow_html=True)
         st.markdown(f"<p style='color: gray; margin-top:-15px;'>Perfil: {st.session_state.perfil}</p>", unsafe_allow_html=True)
         st.divider()
+        
+        # Define as opções do menu dependendo do Perfil
+        if st.session_state.perfil == 'Gestor':
+            opcoes_menu = ["📊 Dashboard Financeiro", "📅 Gestão de Agenda", "⚠️ Facilities", "⚙️ Configurações"]
+        else:
+            opcoes_menu = ["📅 Gestão de Agenda", "⚠️ Facilities"]
+            
+        # O novo Menu Vertical
+        st.markdown("**Navegação**")
+        menu_selecionado = st.radio("", opcoes_menu, label_visibility="collapsed")
+        
+        # Quebras de linha para empurrar o botão vermelho para o fundo da tela
+        st.write("<br><br><br><br><br><br>", unsafe_allow_html=True)
+        
+        # Botão de Sair do Sistema (Ficará vermelho por causa do CSS lá no topo)
         if st.button("Sair do Sistema", use_container_width=True):
             st.session_state.autenticado = False
             st.session_state.clinica_id = None
@@ -120,39 +134,32 @@ else:
             st.session_state.perfil = ""
             st.rerun()
 
+    # ==========================================
+    # ÁREA CENTRAL (CONTEÚDO DAS TELAS)
+    # ==========================================
     st.markdown("<h2 style='color: #333;'>🏥 Painel de Gestão Inteligente</h2>", unsafe_allow_html=True)
-    
-    # LÓGICA DE CONTROLE DE ACESSO (RBAC)
-    if st.session_state.perfil == 'Gestor':
-        abas_lista = ["📊 Dashboard Financeiro", "📅 Gestão de Agenda", "⚠️ Facilities", "⚙️ Configurações"]
-        abas = st.tabs(abas_lista)
-        aba_dashboard, aba_agenda, aba_facilities, aba_config = abas[0], abas[1], abas[2], abas[3]
-    else:
-        abas_lista = ["📅 Gestão de Agenda", "⚠️ Facilities"]
-        abas = st.tabs(abas_lista)
-        aba_agenda, aba_facilities = abas[0], abas[1]
+    st.write("---")
 
-    # === ABA 1: DASHBOARD FINANCEIRO (SÓ GESTOR VÊ) ===
-    if st.session_state.perfil == 'Gestor':
-        with aba_dashboard:
-            st.subheader("Resumo do Mês (Impacto do Sistema)")
-            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-            col_m1.metric(label="Consultas Agendadas", value="145", delta="12% a mais")
-            col_m2.metric(label="Taxa de Cancelamento", value="18%", delta="-5% com alertas", delta_color="inverse")
-            col_m3.metric(label="Consultas Recuperadas", value="26", delta="Substitutos acionados")
-            col_m4.metric(label="Receita Recuperada", value="R$ 3.900,00", delta="+ R$ 450,00 na semana")
-            
-            st.write("---")
-            st.write("📈 **Projeção de Faturamento vs Receita Salva pelo App**")
-            dados_grafico = pd.DataFrame({
-                "Mês": ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun"],
-                "Faturamento Base (R$)": [20000, 22000, 21000, 25000, 28000, 31000],
-                "Recuperado pelo App (R$)": [0, 0, 0, 1500, 3200, 3900]
-            }).set_index("Mês")
-            st.bar_chart(dados_grafico)
+    # === TELA 1: DASHBOARD FINANCEIRO ===
+    if menu_selecionado == "📊 Dashboard Financeiro":
+        st.subheader("Resumo do Mês (Impacto do Sistema)")
+        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+        col_m1.metric(label="Consultas Agendadas", value="145", delta="12% a mais")
+        col_m2.metric(label="Taxa de Cancelamento", value="18%", delta="-5% com alertas", delta_color="inverse")
+        col_m3.metric(label="Consultas Recuperadas", value="26", delta="Substitutos acionados")
+        col_m4.metric(label="Receita Recuperada", value="R$ 3.900,00", delta="+ R$ 450,00 na semana")
+        
+        st.write("---")
+        st.write("📈 **Projeção de Faturamento vs Receita Salva pelo App**")
+        dados_grafico = pd.DataFrame({
+            "Mês": ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun"],
+            "Faturamento Base (R$)": [20000, 22000, 21000, 25000, 28000, 31000],
+            "Recuperado pelo App (R$)": [0, 0, 0, 1500, 3200, 3900]
+        }).set_index("Mês")
+        st.bar_chart(dados_grafico)
 
-    # === ABA 2: GESTÃO DE AGENDA (TODOS VEEM) ===
-    with aba_agenda:
+    # === TELA 2: GESTÃO DE AGENDA ===
+    elif menu_selecionado == "📅 Gestão de Agenda":
         resposta_agenda = supabase.table("agenda").select("*").eq("clinica_id", st.session_state.clinica_id).execute()
         agenda_df = pd.DataFrame(resposta_agenda.data)
         
@@ -214,8 +221,8 @@ else:
             else:
                 st.write("Nenhum paciente na fila.")
 
-    # === ABA 3: FACILITIES E SEGURANÇA (TODOS VEEM) ===
-    with aba_facilities:
+    # === TELA 3: FACILITIES E SEGURANÇA ===
+    elif menu_selecionado == "⚠️ Facilities":
         st.subheader("Gerador de Sinalização de Emergência")
         st.write("Crie avisos visuais de alta prioridade para impressão imediata.")
         
@@ -271,43 +278,42 @@ else:
             """
             st.components.v1.html(html_impressao, height=450)
 
-    # === ABA 4: CONFIGURAÇÕES E EQUIPE (SÓ GESTOR VÊ) ===
-    if st.session_state.perfil == 'Gestor':
-        with aba_config:
-            st.subheader("👥 Gestão de Equipe e Acessos")
-            col_add, col_lista = st.columns([1, 1])
-            
-            with col_add:
-                st.markdown("**Cadastrar Novo Usuário**")
-                with st.form("form_novo_usuario"):
-                    novo_nome = st.text_input("Nome Completo")
-                    novo_email = st.text_input("E-mail de Acesso")
-                    nova_senha = st.text_input("Senha", type="password")
-                    novo_perfil = st.selectbox("Nível de Acesso da Conta", ["Recepcao", "Gestor"])
-                    
-                    submit_usuario = st.form_submit_button("Criar Conta", type="primary", use_container_width=True)
-                    
-                    if submit_usuario:
-                        busca_email = supabase.table("usuarios").select("email").eq("email", novo_email).execute()
-                        if len(busca_email.data) > 0:
-                            st.error("❌ Este e-mail já existe no sistema.")
-                        elif novo_nome and novo_senha:
-                            supabase.table("usuarios").insert({
-                                "clinica_id": st.session_state.clinica_id,
-                                "nome": novo_nome,
-                                "email": novo_email,
-                                "senha": nova_senha,
-                                "perfil": novo_perfil
-                            }).execute()
-                            st.success(f"✅ Conta de '{novo_nome}' criada com sucesso!")
-                            st.rerun()
-                        else:
-                            st.warning("⚠️ Preencha todos os campos antes de salvar.")
-                            
-            with col_lista:
-                st.markdown("**Equipe Ativa**")
-                usuarios_da_clinica = supabase.table("usuarios").select("nome, email, perfil").eq("clinica_id", st.session_state.clinica_id).execute()
+    # === TELA 4: CONFIGURAÇÕES E EQUIPE ===
+    elif menu_selecionado == "⚙️ Configurações":
+        st.subheader("👥 Gestão de Equipe e Acessos")
+        col_add, col_lista = st.columns([1, 1])
+        
+        with col_add:
+            st.markdown("**Cadastrar Novo Usuário**")
+            with st.form("form_novo_usuario"):
+                novo_nome = st.text_input("Nome Completo")
+                novo_email = st.text_input("E-mail de Acesso")
+                nova_senha = st.text_input("Senha", type="password")
+                novo_perfil = st.selectbox("Nível de Acesso da Conta", ["Recepcao", "Gestor"])
                 
-                if len(usuarios_da_clinica.data) > 0:
-                    df_usuarios = pd.DataFrame(usuarios_da_clinica.data).rename(columns={"nome": "Nome", "email": "E-mail", "perfil": "Perfil"})
-                    st.dataframe(df_usuarios, hide_index=True, use_container_width=True)
+                submit_usuario = st.form_submit_button("Criar Conta", type="primary", use_container_width=True)
+                
+                if submit_usuario:
+                    busca_email = supabase.table("usuarios").select("email").eq("email", novo_email).execute()
+                    if len(busca_email.data) > 0:
+                        st.error("❌ Este e-mail já existe no sistema.")
+                    elif novo_nome and novo_senha:
+                        supabase.table("usuarios").insert({
+                            "clinica_id": st.session_state.clinica_id,
+                            "nome": novo_nome,
+                            "email": novo_email,
+                            "senha": nova_senha,
+                            "perfil": novo_perfil
+                        }).execute()
+                        st.success(f"✅ Conta de '{novo_nome}' criada com sucesso!")
+                        st.rerun()
+                    else:
+                        st.warning("⚠️ Preencha todos os campos antes de salvar.")
+                        
+        with col_lista:
+            st.markdown("**Equipe Ativa**")
+            usuarios_da_clinica = supabase.table("usuarios").select("nome, email, perfil").eq("clinica_id", st.session_state.clinica_id).execute()
+            
+            if len(usuarios_da_clinica.data) > 0:
+                df_usuarios = pd.DataFrame(usuarios_da_clinica.data).rename(columns={"nome": "Nome", "email": "E-mail", "perfil": "Perfil"})
+                st.dataframe(df_usuarios, hide_index=True, use_container_width=True)
