@@ -688,9 +688,9 @@ else:
             st.divider()
 
             if st.session_state.perfil == "Gestor":
-                opcoes = ["📊 Dashboard", "📅 Agenda", "👤 Pacientes", "📋 Relatórios", "⚠️ Facilities", "⚙️ Configurações"]
+                opcoes = ["📊 Dashboard", "📅 Agenda", "👤 Pacientes", "📋 Relatórios", "📄 Documentos", "⚠️ Facilities", "⚙️ Configurações"]
             else:
-                opcoes = ["📅 Agenda", "👤 Pacientes", "⚠️ Facilities"]
+                opcoes = ["📅 Agenda", "👤 Pacientes", "📄 Documentos", "⚠️ Facilities"]
 
             st.markdown("<div style='font-size:0.7rem;color:#475569;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.5rem;'>Menu</div>", unsafe_allow_html=True)
             menu = st.radio("", opcoes, label_visibility="collapsed")
@@ -1552,6 +1552,336 @@ CREATE TABLE historico_consultas (
                     </script>
                     """
                     st.components.v1.html(html_anvisa, height=60)
+
+        # === DOCUMENTOS MÉDICOS ===
+        elif menu == "📄 Documentos":
+            st.markdown("### 📄 Emissão de Documentos Médicos")
+
+            # Buscar pacientes da agenda
+            agenda_resp = supabase.table("agenda").select("*").eq("clinica_id", cid).execute()
+            pacientes_agenda = [r["paciente_nome"] for r in agenda_resp.data] if agenda_resp.data else []
+            pacientes_agenda = ["— selecione —"] + pacientes_agenda
+
+            doc_tabs = st.tabs([
+                "💊 Receita Simples",
+                "📋 Atestado Médico",
+                "🕐 Declaração de Comparecimento",
+                "🔀 Encaminhamento",
+                "⚠️ Receita Controlada (B1/B2)"
+            ])
+
+            # Dados do médico — reutilizados em todos os documentos
+            with st.expander("👨‍⚕️ Dados do médico (preencha uma vez)", expanded=False):
+                col_med1, col_med2, col_med3 = st.columns(3)
+                with col_med1:
+                    med_nome = st.text_input("Nome do médico", key="med_nome", placeholder="Dr. João Silva")
+                with col_med2:
+                    med_crm  = st.text_input("CRM", key="med_crm", placeholder="Ex: CRM/GO 12345")
+                with col_med3:
+                    med_esp  = st.text_input("Especialidade", key="med_esp", placeholder="Ex: Clínica Geral")
+                med_clinica  = st.text_input("Nome da clínica", key="med_clinica", placeholder="Ex: Clínica Modelo")
+                med_endereco = st.text_input("Endereço da clínica", key="med_endereco", placeholder="Ex: Rua das Flores, 123 — Goiânia/GO")
+
+            def cabecalho_doc(titulo, subtitulo=""):
+                return f"""
+                <div style="border-bottom:3px solid #0f172a;padding-bottom:12px;margin-bottom:16px;">
+                    <table width="100%"><tr>
+                        <td style="vertical-align:middle;">
+                            <div style="font-size:18px;font-weight:700;color:#0f172a;font-family:Arial,sans-serif;">
+                                {med_nome or 'Dr. _________________'}
+                            </div>
+                            <div style="font-size:12px;color:#475569;font-family:Arial,sans-serif;">
+                                {med_esp or 'Especialidade'} &nbsp;|&nbsp; {med_crm or 'CRM: _______'}
+                            </div>
+                            <div style="font-size:11px;color:#64748b;font-family:Arial,sans-serif;">
+                                {med_clinica or 'Clínica'} — {med_endereco or 'Endereço'}
+                            </div>
+                        </td>
+                        <td style="text-align:right;vertical-align:middle;">
+                            <div style="font-size:13px;font-weight:700;color:#0f172a;
+                            font-family:Arial,sans-serif;text-transform:uppercase;
+                            letter-spacing:0.05em;">{titulo}</div>
+                            {"<div style='font-size:11px;color:#64748b;font-family:Arial,sans-serif;'>"+subtitulo+"</div>" if subtitulo else ""}
+                        </td>
+                    </tr></table>
+                </div>"""
+
+            def rodape_doc(data_str):
+                return f"""
+                <div style="margin-top:40px;">
+                    <div style="height:1px;background:#e2e8f0;margin-bottom:8px;"></div>
+                    <table width="100%"><tr>
+                        <td style="font-size:11px;color:#64748b;font-family:Arial,sans-serif;">
+                            {med_clinica or 'Clínica'} — {med_endereco or 'Endereço'}
+                        </td>
+                        <td style="text-align:right;">
+                            <div style="border-top:1px solid #0f172a;padding-top:4px;
+                            font-size:11px;font-family:Arial,sans-serif;color:#374151;">
+                                {med_nome or '_________________'} — {med_crm or 'CRM: _______'}
+                            </div>
+                        </td>
+                    </tr></table>
+                    <div style="text-align:center;margin-top:12px;font-size:9px;
+                    color:#94a3b8;font-family:Arial,sans-serif;">
+                        Documento emitido em {data_str} via ClinicFlow &nbsp;|&nbsp; Documento de uso médico
+                    </div>
+                </div>"""
+
+            def imprimir_js(doc_id, titulo):
+                return f"""
+                <script>
+                function imprimir_{doc_id}(){{
+                    var c=document.getElementById('doc_{doc_id}').innerHTML;
+                    var w=window.open('','','height=900,width=750');
+                    w.document.write('<html><head><title>{titulo}</title>');
+                    w.document.write('<style>@page{{margin:20mm;}}body{{font-family:Arial,sans-serif;padding:0;margin:0;color:#0f172a;}}table{{border-collapse:collapse;width:100%;}}</style>');
+                    w.document.write('</head><body>'+c+'</body></html>');
+                    w.document.close();w.focus();
+                    setTimeout(function(){{w.print();w.close();}},500);
+                }}
+                </script>"""
+
+            data_hoje = datetime.now().strftime("%d/%m/%Y")
+
+            # ── RECEITA SIMPLES ──────────────────────────────────────
+            with doc_tabs[0]:
+                col_r1, col_r2 = st.columns([1, 1])
+                with col_r1:
+                    pac_receita = st.selectbox("Paciente:", pacientes_agenda, key="pac_receita")
+                    pac_receita_manual = st.text_input("Ou digite o nome:", key="pac_receita_manual")
+                    nome_pac_r = pac_receita_manual if pac_receita_manual else (pac_receita if pac_receita != "— selecione —" else "")
+                    data_nasc_r = st.text_input("Data de nascimento:", key="nasc_r", placeholder="Ex: 01/01/1980")
+                    st.markdown("**Prescrição:**")
+                    prescricao = st.text_area("Medicamentos e posologia:", height=180,
+                        placeholder="Ex:
+1. Paracetamol 500mg
+   Tomar 1 comprimido de 8 em 8 horas por 5 dias
+
+2. Ibuprofeno 400mg
+   Tomar 1 comprimido de 12 em 12 horas por 3 dias",
+                        key="prescricao_simples")
+                    obs_r = st.text_area("Observações:", key="obs_r", height=60)
+
+                with col_r2:
+                    prescricao_html = prescricao.replace("\n","<br>") if prescricao else ""
+                    html_receita = f"""
+                    <button onclick="imprimir_receita()" style="width:100%;padding:10px;font-size:0.9rem;
+                    font-weight:600;background:#0f172a;color:white;border:none;border-radius:10px;
+                    cursor:pointer;margin-bottom:12px;">🖨️ Imprimir Receita</button>
+                    <div id="doc_receita" style="display:none;">
+                        {cabecalho_doc("Receita Médica")}
+                        <table width="100%" style="margin-bottom:12px;">
+                            <tr>
+                                <td style="font-size:12px;font-family:Arial,sans-serif;color:#374151;">
+                                    <b>Paciente:</b> {nome_pac_r or '___________________________'}
+                                </td>
+                                <td style="font-size:12px;font-family:Arial,sans-serif;color:#374151;">
+                                    <b>Nascimento:</b> {data_nasc_r or '___/___/______'}
+                                </td>
+                                <td style="font-size:12px;font-family:Arial,sans-serif;color:#374151;text-align:right;">
+                                    <b>Data:</b> {data_hoje}
+                                </td>
+                            </tr>
+                        </table>
+                        <div style="height:1px;background:#e2e8f0;margin:12px 0;"></div>
+                        <div style="font-size:13px;font-family:Arial,sans-serif;color:#0f172a;
+                        line-height:1.8;min-height:200px;white-space:pre-wrap;">{prescricao or ''}</div>
+                        {"<div style='margin-top:12px;font-size:12px;color:#475569;font-family:Arial,sans-serif;'><b>Obs:</b> "+obs_r+"</div>" if obs_r else ""}
+                        {rodape_doc(data_hoje)}
+                    </div>
+                    {imprimir_js("receita", "Receita Médica")}
+                    """
+                    st.components.v1.html(html_receita, height=70)
+                    st.info("📋 Preview: preencha os campos ao lado e clique em Imprimir.")
+
+            # ── ATESTADO MÉDICO ──────────────────────────────────────
+            with doc_tabs[1]:
+                col_a1, col_a2 = st.columns([1, 1])
+                with col_a1:
+                    pac_atestado = st.selectbox("Paciente:", pacientes_agenda, key="pac_atestado")
+                    pac_atestado_manual = st.text_input("Ou digite o nome:", key="pac_atestado_manual")
+                    nome_pac_a = pac_atestado_manual if pac_atestado_manual else (pac_atestado if pac_atestado != "— selecione —" else "")
+                    dias_atestado = st.number_input("Dias de afastamento:", min_value=1, value=1, key="dias_at")
+                    cid_atestado  = st.text_input("CID-10 (opcional):", key="cid_at", placeholder="Ex: J11 — Influenza")
+                    obs_atestado  = st.text_area("Observações médicas:", key="obs_at", height=80,
+                        placeholder="Ex: Paciente necessita de repouso absoluto.")
+
+                with col_a2:
+                    html_atestado = f"""
+                    <button onclick="imprimir_atestado()" style="width:100%;padding:10px;font-size:0.9rem;
+                    font-weight:600;background:#0f172a;color:white;border:none;border-radius:10px;
+                    cursor:pointer;margin-bottom:12px;">🖨️ Imprimir Atestado</button>
+                    <div id="doc_atestado" style="display:none;">
+                        {cabecalho_doc("Atestado Médico")}
+                        <div style="margin:24px 0;font-size:13px;font-family:Arial,sans-serif;
+                        color:#0f172a;line-height:2;text-align:justify;">
+                            Atesto para os devidos fins que o(a) paciente
+                            <b>{nome_pac_a or '___________________________'}</b>
+                            esteve sob meus cuidados médicos, necessitando de afastamento de suas
+                            atividades pelo período de
+                            <b>{int(dias_atestado)} ({['zero','um','dois','três','quatro','cinco','seis','sete','oito','nove','dez'][min(int(dias_atestado),10)] if int(dias_atestado)<=10 else str(int(dias_atestado))}) dia(s)</b>,
+                            a contar de {data_hoje}.
+                            {"<br><b>CID-10:</b> "+cid_atestado if cid_atestado else ""}
+                            {"<br><b>Observações:</b> "+obs_atestado if obs_atestado else ""}
+                        </div>
+                        <div style="text-align:right;font-size:12px;color:#374151;
+                        font-family:Arial,sans-serif;margin-top:8px;">
+                            {med_clinica or 'Clínica'}, {data_hoje}
+                        </div>
+                        {rodape_doc(data_hoje)}
+                    </div>
+                    {imprimir_js("atestado", "Atestado Médico")}
+                    """
+                    st.components.v1.html(html_atestado, height=70)
+                    st.info("📋 Preview: preencha os campos ao lado e clique em Imprimir.")
+
+            # ── DECLARAÇÃO DE COMPARECIMENTO ─────────────────────────
+            with doc_tabs[2]:
+                col_d1, col_d2 = st.columns([1, 1])
+                with col_d1:
+                    pac_decl = st.selectbox("Paciente:", pacientes_agenda, key="pac_decl")
+                    pac_decl_manual = st.text_input("Ou digite o nome:", key="pac_decl_manual")
+                    nome_pac_d = pac_decl_manual if pac_decl_manual else (pac_decl if pac_decl != "— selecione —" else "")
+                    hora_entrada = st.text_input("Hora de entrada:", key="hora_ent", placeholder="Ex: 09:00")
+                    hora_saida   = st.text_input("Hora de saída:",   key="hora_sai", placeholder="Ex: 10:30")
+                    motivo_decl  = st.text_input("Motivo:", key="mot_decl", placeholder="Ex: Consulta médica")
+
+                with col_d2:
+                    html_decl = f"""
+                    <button onclick="imprimir_decl()" style="width:100%;padding:10px;font-size:0.9rem;
+                    font-weight:600;background:#0f172a;color:white;border:none;border-radius:10px;
+                    cursor:pointer;margin-bottom:12px;">🖨️ Imprimir Declaração</button>
+                    <div id="doc_decl" style="display:none;">
+                        {cabecalho_doc("Declaração de Comparecimento")}
+                        <div style="margin:24px 0;font-size:13px;font-family:Arial,sans-serif;
+                        color:#0f172a;line-height:2;text-align:justify;">
+                            Declaramos que o(a) Sr(a).
+                            <b>{nome_pac_d or '___________________________'}</b>
+                            compareceu a esta clínica no dia <b>{data_hoje}</b>,
+                            no horário das <b>{hora_entrada or '__:__'}</b>
+                            às <b>{hora_saida or '__:__'}</b>,
+                            para <b>{motivo_decl or 'consulta médica'}</b>.
+                        </div>
+                        <div style="text-align:right;font-size:12px;color:#374151;
+                        font-family:Arial,sans-serif;margin-top:8px;">
+                            {med_clinica or 'Clínica'}, {data_hoje}
+                        </div>
+                        {rodape_doc(data_hoje)}
+                    </div>
+                    {imprimir_js("decl", "Declaração de Comparecimento")}
+                    """
+                    st.components.v1.html(html_decl, height=70)
+                    st.info("📋 Preview: preencha os campos ao lado e clique em Imprimir.")
+
+            # ── ENCAMINHAMENTO ───────────────────────────────────────
+            with doc_tabs[3]:
+                col_e1, col_e2 = st.columns([1, 1])
+                with col_e1:
+                    pac_enc = st.selectbox("Paciente:", pacientes_agenda, key="pac_enc")
+                    pac_enc_manual = st.text_input("Ou digite o nome:", key="pac_enc_manual")
+                    nome_pac_e = pac_enc_manual if pac_enc_manual else (pac_enc if pac_enc != "— selecione —" else "")
+                    esp_destino  = st.text_input("Especialidade de destino:", key="esp_dest",
+                        placeholder="Ex: Cardiologista")
+                    motivo_enc   = st.text_area("Motivo do encaminhamento:", key="mot_enc", height=100,
+                        placeholder="Ex: Paciente com queixa de dor torácica recorrente, solicito avaliação cardiológica.")
+                    hipotese_enc = st.text_input("Hipótese diagnóstica:", key="hip_enc",
+                        placeholder="Ex: Possível angina")
+                    urgencia_enc = st.selectbox("Prioridade:", ["Eletivo","Prioritário","Urgente"], key="urg_enc")
+
+                with col_e2:
+                    cor_urg = {"Eletivo":"#1e40af","Prioritário":"#d97706","Urgente":"#dc2626"}.get(urgencia_enc,"#1e40af")
+                    html_enc = f"""
+                    <button onclick="imprimir_enc()" style="width:100%;padding:10px;font-size:0.9rem;
+                    font-weight:600;background:#0f172a;color:white;border:none;border-radius:10px;
+                    cursor:pointer;margin-bottom:12px;">🖨️ Imprimir Encaminhamento</button>
+                    <div id="doc_enc" style="display:none;">
+                        {cabecalho_doc("Encaminhamento Médico",
+                          f'<span style="background:{cor_urg};color:white;padding:2px 10px;border-radius:99px;font-size:10px;">{urgencia_enc}</span>')}
+                        <table width="100%" style="margin:16px 0;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+                            <tr style="background:#f8fafc;">
+                                <td style="padding:8px 12px;font-size:12px;font-family:Arial,sans-serif;color:#374151;">
+                                    <b>Paciente:</b> {nome_pac_e or '___________________________'}
+                                </td>
+                                <td style="padding:8px 12px;font-size:12px;font-family:Arial,sans-serif;color:#374151;">
+                                    <b>Encaminhar para:</b> {esp_destino or '___________________________'}
+                                </td>
+                                <td style="padding:8px 12px;font-size:12px;font-family:Arial,sans-serif;
+                                color:{cor_urg};font-weight:700;">
+                                    {urgencia_enc}
+                                </td>
+                            </tr>
+                        </table>
+                        <div style="margin:8px 0 16px;">
+                            <div style="font-size:11px;color:#64748b;font-family:Arial,sans-serif;
+                            text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">Motivo</div>
+                            <div style="font-size:13px;font-family:Arial,sans-serif;color:#0f172a;
+                            line-height:1.7;">{motivo_enc or ''}</div>
+                        </div>
+                        {"<div style='margin:8px 0 16px;'><div style='font-size:11px;color:#64748b;font-family:Arial,sans-serif;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;'>Hipótese diagnóstica</div><div style='font-size:13px;font-family:Arial,sans-serif;color:#0f172a;'>"+hipotese_enc+"</div></div>" if hipotese_enc else ""}
+                        {rodape_doc(data_hoje)}
+                    </div>
+                    {imprimir_js("enc", "Encaminhamento Médico")}
+                    """
+                    st.components.v1.html(html_enc, height=70)
+                    st.info("📋 Preview: preencha os campos ao lado e clique em Imprimir.")
+
+            # ── RECEITA CONTROLADA B1/B2 ─────────────────────────────
+            with doc_tabs[4]:
+                st.warning("⚠️ Receitas B1 e B2 exigem uso de formulário talonado oficial (Portaria SVS/MS 344/98). Este módulo gera um rascunho de apoio — o documento oficial deve ser preenchido no talão próprio.")
+                col_b1, col_b2 = st.columns([1, 1])
+                with col_b1:
+                    tipo_ctrl = st.radio("Tipo:", ["B1 — Psicotrópico","B2 — Anorexígeno"], horizontal=True, key="tipo_ctrl")
+                    pac_ctrl  = st.selectbox("Paciente:", pacientes_agenda, key="pac_ctrl")
+                    pac_ctrl_manual = st.text_input("Ou digite o nome:", key="pac_ctrl_manual")
+                    nome_pac_c = pac_ctrl_manual if pac_ctrl_manual else (pac_ctrl if pac_ctrl != "— selecione —" else "")
+                    end_pac_c  = st.text_input("Endereço do paciente:", key="end_pac_c")
+                    doc_pac_c  = st.text_input("CPF/RG do paciente:", key="doc_pac_c")
+                    med_ctrl   = st.text_area("Medicamento e posologia:", height=120,
+                        placeholder="Ex:
+Diazepam 5mg
+Tomar 1 comprimido à noite por 15 dias
+Quantidade: 15 comprimidos",
+                        key="med_ctrl")
+
+                with col_b2:
+                    html_ctrl = f"""
+                    <button onclick="imprimir_ctrl()" style="width:100%;padding:10px;font-size:0.9rem;
+                    font-weight:600;background:#991b1b;color:white;border:none;border-radius:10px;
+                    cursor:pointer;margin-bottom:12px;">🖨️ Imprimir Rascunho {tipo_ctrl.split('—')[0].strip()}</button>
+                    <div id="doc_ctrl" style="display:none;">
+                        <div style="background:#fef2f2;border:2px solid #dc2626;border-radius:8px;
+                        padding:6px 12px;margin-bottom:12px;text-align:center;">
+                            <span style="font-size:11px;color:#991b1b;font-family:Arial,sans-serif;font-weight:700;">
+                                ⚠️ RASCUNHO — {tipo_ctrl.upper()} — TRANSCREVER PARA TALÃO OFICIAL
+                            </span>
+                        </div>
+                        {cabecalho_doc(f"Receita de Controle Especial — {tipo_ctrl.split('—')[0].strip()}", "Portaria SVS/MS 344/98")}
+                        <table width="100%" style="margin:12px 0;font-size:12px;font-family:Arial,sans-serif;">
+                            <tr>
+                                <td style="padding:4px 0;"><b>Paciente:</b> {nome_pac_c or '___________________________'}</td>
+                                <td style="padding:4px 0;"><b>Data:</b> {data_hoje}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding:4px 0;"><b>Endereço:</b> {end_pac_c or '___________________________'}</td>
+                                <td style="padding:4px 0;"><b>CPF/RG:</b> {doc_pac_c or '___________________________'}</td>
+                            </tr>
+                        </table>
+                        <div style="height:1px;background:#e2e8f0;margin:12px 0;"></div>
+                        <div style="font-size:13px;font-family:Arial,sans-serif;color:#0f172a;
+                        line-height:1.8;min-height:140px;white-space:pre-wrap;">{med_ctrl or ''}</div>
+                        {rodape_doc(data_hoje)}
+                        <div style="margin-top:16px;border:1px solid #e2e8f0;border-radius:6px;
+                        padding:8px;background:#f8fafc;">
+                            <div style="font-size:10px;color:#64748b;font-family:Arial,sans-serif;">
+                                <b>Identificação do comprador (2ª via — fica na farmácia):</b><br>
+                                Nome: _________________________ &nbsp; CPF/RG: _________________ &nbsp; Data: _________
+                            </div>
+                        </div>
+                    </div>
+                    {imprimir_js("ctrl", f"Receita Controlada {tipo_ctrl}")}
+                    """
+                    st.components.v1.html(html_ctrl, height=70)
+                    st.info("📋 Rascunho de apoio — transcrever para talão oficial B1/B2.")
 
         # === CONFIGURAÇÕES ===
         elif menu == "⚙️ Configurações":
