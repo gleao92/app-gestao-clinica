@@ -1653,12 +1653,7 @@ CREATE TABLE historico_consultas (
                     data_nasc_r = st.text_input("Data de nascimento:", key="nasc_r", placeholder="Ex: 01/01/1980")
                     st.markdown("**Prescrição:**")
                     prescricao = st.text_area("Medicamentos e posologia:", height=180,
-                        placeholder="Ex:
-1. Paracetamol 500mg
-   Tomar 1 comprimido de 8 em 8 horas por 5 dias
-
-2. Ibuprofeno 400mg
-   Tomar 1 comprimido de 12 em 12 horas por 3 dias",
+                        placeholder="Ex:\n1. Paracetamol 500mg\n   Tomar 1 comprimido de 8 em 8 horas por 5 dias\n\n2. Ibuprofeno 400mg\n   Tomar 1 comprimido de 12 em 12 horas por 3 dias",
                         key="prescricao_simples")
                     obs_r = st.text_area("Observações:", key="obs_r", height=60)
 
@@ -1837,10 +1832,7 @@ CREATE TABLE historico_consultas (
                     end_pac_c  = st.text_input("Endereço do paciente:", key="end_pac_c")
                     doc_pac_c  = st.text_input("CPF/RG do paciente:", key="doc_pac_c")
                     med_ctrl   = st.text_area("Medicamento e posologia:", height=120,
-                        placeholder="Ex:
-Diazepam 5mg
-Tomar 1 comprimido à noite por 15 dias
-Quantidade: 15 comprimidos",
+                        placeholder="Ex:\nDiazepam 5mg\nTomar 1 comprimido à noite por 15 dias\nQuantidade: 15 comprimidos",
                         key="med_ctrl")
 
                 with col_b2:
