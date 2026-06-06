@@ -431,26 +431,205 @@ else:
 
     # --- LOGIN ---
     if not st.session_state.autenticado:
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        col1, col2, col3 = st.columns([1, 1.6, 1])
-        with col2:
-            st.markdown("""
-            <div style="text-align:center;margin-bottom:2rem;">
-                <div style="width:56px;height:56px;background:#1e3a8a;border-radius:16px;
-                display:flex;align-items:center;justify-content:center;font-size:1.6rem;
-                margin:0 auto 1rem;">🏥</div>
-                <h1 style="font-family:'DM Sans',sans-serif;font-weight:700;font-size:1.8rem;
-                color:#0f172a;margin:0;">ClinicFlow</h1>
-                <p style="color:#64748b;margin-top:0.4rem;font-size:0.95rem;">
-                Gestão inteligente para clínicas</p>
-            </div>
-            """, unsafe_allow_html=True)
+        st.markdown("""
+        <style>
+        .login-outer {
+            display: flex;
+            min-height: 100vh;
+            align-items: center;
+            justify-content: center;
+            background: #f0f4f8;
+            padding: 2rem 1rem;
+        }
+        .login-card {
+            display: flex;
+            width: 100%;
+            max-width: 860px;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.12);
+        }
+        .login-left {
+            background: #060d1f;
+            width: 52%;
+            padding: 2.8rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .login-right {
+            background: #ffffff;
+            width: 48%;
+            padding: 2.8rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .login-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 2.5rem;
+        }
+        .login-logo {
+            width: 38px; height: 38px;
+            background: #1d4ed8;
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.2rem;
+        }
+        .login-brand-name {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #f1f5f9;
+            font-family: 'DM Sans', sans-serif;
+        }
+        .login-hero {
+            font-size: 1.65rem;
+            font-weight: 700;
+            color: #f1f5f9;
+            line-height: 1.3;
+            margin-bottom: 0.9rem;
+            font-family: 'DM Sans', sans-serif;
+        }
+        .login-hero span { color: #3b82f6; }
+        .login-sub {
+            font-size: 0.83rem;
+            color: #64748b;
+            line-height: 1.65;
+            margin-bottom: 2rem;
+            font-family: 'DM Sans', sans-serif;
+        }
+        .login-stats {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 2rem;
+        }
+        .login-stat {
+            background: rgba(255,255,255,0.04);
+            border: 0.5px solid rgba(255,255,255,0.08);
+            border-radius: 10px;
+            padding: 10px 14px;
+            flex: 1;
+        }
+        .login-stat-val {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #f1f5f9;
+            font-family: 'DM Sans', sans-serif;
+        }
+        .login-stat-label {
+            font-size: 0.7rem;
+            color: #64748b;
+            margin-top: 2px;
+            font-family: 'DM Sans', sans-serif;
+        }
+        .login-dots {
+            display: flex;
+            gap: 6px;
+        }
+        .login-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.15);
+        }
+        .login-dot-active {
+            width: 18px; height: 6px;
+            border-radius: 99px;
+            background: #3b82f6;
+        }
+        .login-tag {
+            display: inline-block;
+            font-size: 0.7rem;
+            background: #dbeafe;
+            color: #1e40af;
+            padding: 3px 10px;
+            border-radius: 99px;
+            font-weight: 500;
+            margin-bottom: 1rem;
+            font-family: 'DM Sans', sans-serif;
+        }
+        .login-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 0.3rem;
+            font-family: 'DM Sans', sans-serif;
+        }
+        .login-subtitle {
+            font-size: 0.85rem;
+            color: #64748b;
+            margin-bottom: 1.8rem;
+            font-family: 'DM Sans', sans-serif;
+        }
+        .login-badges {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 1.2rem;
+        }
+        .login-badge {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            background: #f1f5f9;
+            border-radius: 99px;
+            padding: 4px 10px;
+            font-size: 0.72rem;
+            color: #475569;
+            font-family: 'DM Sans', sans-serif;
+        }
+        @media (max-width: 640px) {
+            .login-left { display: none; }
+            .login-right { width: 100%; }
+        }
+        </style>
 
+        <div class="login-outer">
+          <div class="login-card">
+            <div class="login-left">
+              <div>
+                <div class="login-brand">
+                  <div class="login-logo">🏥</div>
+                  <span class="login-brand-name">ClinicFlow</span>
+                </div>
+                <div class="login-hero">Sua clínica <span>nunca mais</span> perde uma consulta</div>
+                <div class="login-sub">Gestão inteligente com substituição automática de cancelamentos, fila de espera e notificações por WhatsApp.</div>
+                <div class="login-stats">
+                  <div class="login-stat">
+                    <div class="login-stat-val">R$3.9k</div>
+                    <div class="login-stat-label">recuperado/mês</div>
+                  </div>
+                  <div class="login-stat">
+                    <div class="login-stat-val">-68%</div>
+                    <div class="login-stat-label">vagas perdidas</div>
+                  </div>
+                  <div class="login-stat">
+                    <div class="login-stat-val">26</div>
+                    <div class="login-stat-label">encaixes/mês</div>
+                  </div>
+                </div>
+              </div>
+              <div class="login-dots">
+                <div class="login-dot-active"></div>
+                <div class="login-dot"></div>
+                <div class="login-dot"></div>
+              </div>
+            </div>
+            <div class="login-right">
+              <div class="login-tag">✦ Acesso seguro</div>
+              <div class="login-title">Bem-vindo de volta</div>
+              <div class="login-subtitle">Acesse o painel da sua clínica</div>
+        """, unsafe_allow_html=True)
+
+        # Formulário Streamlit real dentro do painel direito
+        col_esp1, col_form, col_esp2 = st.columns([0.15, 3, 0.15])
+        with col_form:
             with st.form("login"):
-                email = st.text_input("E-mail", placeholder="seu@email.com")
-                senha = st.text_input("Senha", type="password")
-                st.markdown("<br>", unsafe_allow_html=True)
-                submit = st.form_submit_button("Entrar", type="primary", use_container_width=True)
+                email = st.text_input("E-mail", placeholder="seu@email.com", label_visibility="collapsed")
+                senha = st.text_input("Senha", placeholder="••••••••", type="password", label_visibility="collapsed")
+                st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+                submit = st.form_submit_button("Entrar no painel →", type="primary", use_container_width=True)
 
                 if submit:
                     email_limpo = email.strip().lower()
@@ -478,6 +657,16 @@ else:
                     else:
                         if not usuario_valido:
                             st.error("E-mail ou senha incorretos.")
+
+        st.markdown("""
+              <div class="login-badges">
+                <div class="login-badge">🔒 Dados criptografados</div>
+                <div class="login-badge">✅ LGPD compliant</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
 
     # --- PAINEL INTERNO ---
     else:
@@ -735,54 +924,430 @@ CREATE TABLE historico_consultas (
 
         # === FACILITIES ===
         elif menu == "⚠️ Facilities":
-            st.markdown("### ⚠️ Gerador de Sinalização de Emergência")
-            st.caption("Crie avisos visuais de alta prioridade para impressão imediata.")
+            st.markdown("### ⚠️ Facilities & Operações")
 
-            col_f, col_p = st.columns(2)
-            with col_f:
-                tipo = st.selectbox("Tipo de ocorrência:", [
-                    "Cuidado: Vidro Quebrado",
-                    "Atenção: Piso Molhado",
-                    "Perigo: Risco Biológico",
-                    "Aviso: Equipamento em Manutenção"
+            aba_f = st.tabs([
+                "🚨 Sinalização",
+                "✅ Checklist",
+                "📋 Ocorrências",
+                "🔧 Manutenções",
+                "📦 Inventário",
+                "🧹 Limpeza",
+                "📄 ANVISA"
+            ])
+
+            # ── 1. SINALIZAÇÃO ──────────────────────────────────────
+            with aba_f[0]:
+                st.caption("Crie avisos visuais de alta prioridade para impressão imediata.")
+                col_f, col_p = st.columns(2)
+                with col_f:
+                    tipo = st.selectbox("Tipo de ocorrência:", [
+                        "Cuidado: Vidro Quebrado",
+                        "Atenção: Piso Molhado",
+                        "Perigo: Risco Biológico",
+                        "Aviso: Equipamento em Manutenção"
+                    ])
+                    simbolos = {
+                        "Cuidado: Vidro Quebrado": "⚠️ 💥",
+                        "Atenção: Piso Molhado": "⚠️ 💧",
+                        "Perigo: Risco Biológico": "☣️",
+                        "Aviso: Equipamento em Manutenção": "🛑 🔧"
+                    }
+                    simbolo = simbolos[tipo]
+                    desc = st.text_area("Instruções adicionais:", "Por favor, mantenha distância.")
+                with col_p:
+                    html_placa = f"""
+                    <div id="placa" style="border:8px solid #dc2626;padding:2rem;text-align:center;
+                    border-radius:16px;background:#fef2f2;font-family:'DM Sans',sans-serif;">
+                        <div style="font-size:4rem;line-height:1;">{simbolo}</div>
+                        <div style="color:#dc2626;font-weight:700;font-size:1.8rem;
+                        text-transform:uppercase;margin-top:1rem;">{tipo}</div>
+                        <div style="font-size:1rem;color:#374151;margin-top:1rem;">{desc}</div>
+                    </div>
+                    <div style="text-align:center;margin-top:1rem;">
+                        <button onclick="imprimir()" style="padding:12px 28px;font-size:1rem;
+                        font-weight:600;background:#dc2626;color:white;border:none;
+                        border-radius:10px;cursor:pointer;">🖨️ Imprimir</button>
+                    </div>
+                    <script>
+                    function imprimir(){{
+                        var c=document.getElementById('placa').innerHTML;
+                        var w=window.open('','','height=700,width=700');
+                        w.document.write('<html><head><title>Sinalização</title>');
+                        w.document.write('<style>body{{display:flex;justify-content:center;align-items:center;height:90vh;margin:0;font-family:sans-serif;}}');
+                        w.document.write('#c{{border:12px solid #dc2626;padding:3rem;text-align:center;border-radius:16px;background:#fef2f2;width:75%;}}');
+                        w.document.write('</style></head><body><div id="c">'+c+'</div></body></html>');
+                        w.document.close();w.focus();
+                        setTimeout(function(){{w.print();w.close();}},400);
+                    }}
+                    </script>
+                    """
+                    st.components.v1.html(html_placa, height=400)
+
+            # ── 2. CHECKLIST ─────────────────────────────────────────
+            with aba_f[1]:
+                st.caption("Confirme a abertura ou fechamento da clínica diariamente.")
+                tipo_check = st.radio("Tipo:", ["Abertura", "Fechamento"], horizontal=True)
+                responsavel_check = st.text_input("Responsável:")
+
+                itens_abertura = [
+                    "Luzes e ar-condicionado ligados",
+                    "Recepção organizada",
+                    "Equipamentos testados",
+                    "Materiais de higiene abastecidos",
+                    "Agenda do dia revisada",
+                    "WhatsApp da clínica verificado",
+                ]
+                itens_fechamento = [
+                    "Equipamentos desligados",
+                    "Agenda do dia encerrada",
+                    "Lixo descartado corretamente",
+                    "Portas e janelas fechadas",
+                    "Alarme ativado",
+                    "Caixa conferido",
+                ]
+                itens = itens_abertura if tipo_check == "Abertura" else itens_fechamento
+                st.markdown("**Itens do checklist:**")
+                checks = {}
+                for item in itens:
+                    checks[item] = st.checkbox(item)
+
+                if st.button("✅ Registrar checklist", type="primary"):
+                    if responsavel_check:
+                        itens_json = [{"item": k, "ok": v} for k, v in checks.items()]
+                        concluido = all(v for v in checks.values())
+                        try:
+                            supabase.table("checklist_diario").insert({
+                                "clinica_id": cid,
+                                "tipo": tipo_check.lower(),
+                                "responsavel": responsavel_check,
+                                "itens": itens_json,
+                                "concluido": concluido,
+                                "data": datetime.now().strftime("%Y-%m-%d")
+                            }).execute()
+                            if concluido:
+                                st.success("✅ Checklist completo registrado!")
+                            else:
+                                pendentes_check = [k for k,v in checks.items() if not v]
+                                st.warning(f"⚠️ Registrado com {len(pendentes_check)} item(ns) pendente(s).")
+                        except Exception as e:
+                            st.error(f"Erro ao salvar: {e}")
+                    else:
+                        st.warning("Informe o responsável.")
+
+                st.divider()
+                st.markdown("**Histórico recente:**")
+                try:
+                    hist_check = supabase.table("checklist_diario").select("*")                         .eq("clinica_id", cid).order("created_at", desc=True).limit(10).execute()
+                    if hist_check.data:
+                        for h in hist_check.data:
+                            status_icon = "✅" if h["concluido"] else "⚠️"
+                            st.markdown(f"{status_icon} **{h['data']}** — {h['tipo'].capitalize()} — {h['responsavel']}")
+                    else:
+                        st.info("Nenhum checklist registrado ainda.")
+                except:
+                    st.info("Crie a tabela checklist_diario no Supabase para ativar.")
+
+            # ── 3. OCORRÊNCIAS ───────────────────────────────────────
+            with aba_f[2]:
+                col_oc1, col_oc2 = st.columns([1, 1])
+                with col_oc1:
+                    st.markdown("**Registrar nova ocorrência:**")
+                    with st.form("form_ocorrencia"):
+                        oc_titulo = st.text_input("Título da ocorrência")
+                        oc_desc   = st.text_area("Descrição detalhada")
+                        oc_resp   = st.text_input("Responsável")
+                        oc_ok = st.form_submit_button("📋 Registrar", type="primary", use_container_width=True)
+                        if oc_ok and oc_titulo:
+                            try:
+                                supabase.table("ocorrencias").insert({
+                                    "clinica_id": cid,
+                                    "titulo": oc_titulo,
+                                    "descricao": oc_desc,
+                                    "responsavel": oc_resp,
+                                    "status": "Aberta",
+                                    "data": datetime.now().strftime("%Y-%m-%d")
+                                }).execute()
+                                st.success("✅ Ocorrência registrada!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Erro: {e}")
+
+                with col_oc2:
+                    st.markdown("**Ocorrências abertas:**")
+                    try:
+                        ocs = supabase.table("ocorrencias").select("*")                             .eq("clinica_id", cid).order("data", desc=True).execute()
+                        if ocs.data:
+                            for oc in ocs.data:
+                                cor = {"Aberta":"🔴","Em andamento":"🟡","Resolvida":"🟢"}.get(oc["status"],"🔴")
+                                with st.expander(f"{cor} {oc['titulo']} — {oc['data']}"):
+                                    st.write(oc.get("descricao",""))
+                                    novo_status = st.selectbox(
+                                        "Status:", ["Aberta","Em andamento","Resolvida"],
+                                        index=["Aberta","Em andamento","Resolvida"].index(oc["status"]),
+                                        key=f"oc_{oc['id']}"
+                                    )
+                                    if st.button("Salvar status", key=f"btn_oc_{oc['id']}"):
+                                        supabase.table("ocorrencias").update({"status": novo_status}).eq("id", oc["id"]).execute()
+                                        st.rerun()
+                        else:
+                            st.success("Nenhuma ocorrência registrada. 🎉")
+                    except:
+                        st.info("Crie a tabela ocorrencias no Supabase para ativar.")
+
+            # ── 4. MANUTENÇÕES ───────────────────────────────────────
+            with aba_f[3]:
+                col_eq1, col_eq2 = st.columns([1, 1])
+                with col_eq1:
+                    st.markdown("**Cadastrar equipamento:**")
+                    with st.form("form_equip"):
+                        eq_nome   = st.text_input("Nome do equipamento")
+                        eq_modelo = st.text_input("Modelo/Marca")
+                        eq_prox   = st.date_input("Próxima manutenção")
+                        eq_ok = st.form_submit_button("➕ Cadastrar", type="primary", use_container_width=True)
+                        if eq_ok and eq_nome:
+                            try:
+                                supabase.table("equipamentos").insert({
+                                    "clinica_id": cid,
+                                    "nome": eq_nome,
+                                    "modelo": eq_modelo,
+                                    "proxima_manutencao": str(eq_prox),
+                                    "status": "OK"
+                                }).execute()
+                                st.success(f"✅ {eq_nome} cadastrado!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Erro: {e}")
+
+                with col_eq2:
+                    st.markdown("**Equipamentos cadastrados:**")
+                    try:
+                        equips = supabase.table("equipamentos").select("*")                             .eq("clinica_id", cid).order("proxima_manutencao").execute()
+                        if equips.data:
+                            for eq in equips.data:
+                                prox = eq.get("proxima_manutencao","")
+                                dias_restantes = ""
+                                alerta = "🟢"
+                                if prox:
+                                    from datetime import date
+                                    delta = (datetime.strptime(prox, "%Y-%m-%d").date() - date.today()).days
+                                    dias_restantes = f" — {delta}d"
+                                    alerta = "🔴" if delta < 7 else "🟡" if delta < 30 else "🟢"
+                                st.markdown(f"""
+                                <div style="background:white;border:1px solid #e2e8f0;border-radius:10px;
+                                padding:10px 14px;margin-bottom:8px;">
+                                    <div style="font-weight:500;font-size:0.9rem;">{alerta} {eq['nome']}</div>
+                                    <div style="font-size:0.78rem;color:#64748b;">{eq.get('modelo','')} · Manutenção: {prox}{dias_restantes}</div>
+                                </div>
+                                """, unsafe_allow_html=True)
+                        else:
+                            st.info("Nenhum equipamento cadastrado.")
+                    except:
+                        st.info("Crie a tabela equipamentos no Supabase para ativar.")
+
+            # ── 5. INVENTÁRIO ────────────────────────────────────────
+            with aba_f[4]:
+                col_inv1, col_inv2 = st.columns([1, 1])
+                with col_inv1:
+                    st.markdown("**Adicionar material:**")
+                    with st.form("form_inv"):
+                        inv_nome = st.text_input("Nome do material")
+                        inv_qtd  = st.number_input("Quantidade atual", min_value=0, value=10)
+                        inv_min  = st.number_input("Estoque mínimo", min_value=0, value=5)
+                        inv_val  = st.date_input("Validade (opcional)")
+                        inv_ok = st.form_submit_button("➕ Adicionar", type="primary", use_container_width=True)
+                        if inv_ok and inv_nome:
+                            try:
+                                supabase.table("inventario").insert({
+                                    "clinica_id": cid,
+                                    "nome": inv_nome,
+                                    "quantidade": int(inv_qtd),
+                                    "minimo": int(inv_min),
+                                    "validade": str(inv_val)
+                                }).execute()
+                                st.success(f"✅ {inv_nome} adicionado!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Erro: {e}")
+
+                with col_inv2:
+                    st.markdown("**Estoque atual:**")
+                    try:
+                        inv = supabase.table("inventario").select("*").eq("clinica_id", cid).execute()
+                        if inv.data:
+                            alertas_inv = [i for i in inv.data if i["quantidade"] <= i["minimo"]]
+                            if alertas_inv:
+                                st.error(f"⚠️ {len(alertas_inv)} material(is) abaixo do mínimo!")
+                            for item in inv.data:
+                                alerta_icon = "🔴" if item["quantidade"] <= item["minimo"] else "🟢"
+                                from datetime import date
+                                val_str = ""
+                                if item.get("validade"):
+                                    try:
+                                        val_date = datetime.strptime(item["validade"], "%Y-%m-%d").date()
+                                        dias_val = (val_date - date.today()).days
+                                        val_str = f" · Vence em {dias_val}d"
+                                        if dias_val < 30:
+                                            alerta_icon = "🟡"
+                                        if dias_val < 7:
+                                            alerta_icon = "🔴"
+                                    except:
+                                        pass
+                                st.markdown(f"""
+                                <div style="background:white;border:1px solid #e2e8f0;border-radius:10px;
+                                padding:10px 14px;margin-bottom:8px;">
+                                    <div style="font-weight:500;font-size:0.9rem;">{alerta_icon} {item['nome']}</div>
+                                    <div style="font-size:0.78rem;color:#64748b;">
+                                        Qtd: {item['quantidade']} · Mín: {item['minimo']}{val_str}</div>
+                                </div>
+                                """, unsafe_allow_html=True)
+                        else:
+                            st.info("Nenhum material cadastrado.")
+                    except:
+                        st.info("Crie a tabela inventario no Supabase para ativar.")
+
+            # ── 6. LIMPEZA ───────────────────────────────────────────
+            with aba_f[5]:
+                col_lp1, col_lp2 = st.columns([1, 1])
+                with col_lp1:
+                    st.markdown("**Cadastrar escala:**")
+                    with st.form("form_limpeza"):
+                        lp_amb  = st.text_input("Ambiente", placeholder="Ex: Sala de espera")
+                        lp_resp = st.text_input("Responsável")
+                        lp_freq = st.selectbox("Frequência:", ["Diária","Semanal","Mensal"])
+                        lp_ok = st.form_submit_button("➕ Cadastrar", type="primary", use_container_width=True)
+                        if lp_ok and lp_amb:
+                            try:
+                                supabase.table("escala_limpeza").insert({
+                                    "clinica_id": cid,
+                                    "ambiente": lp_amb,
+                                    "responsavel": lp_resp,
+                                    "frequencia": lp_freq,
+                                    "ultima_limpeza": datetime.now().strftime("%Y-%m-%d")
+                                }).execute()
+                                st.success(f"✅ {lp_amb} adicionado!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Erro: {e}")
+
+                with col_lp2:
+                    st.markdown("**Escala atual:**")
+                    try:
+                        limpeza = supabase.table("escala_limpeza").select("*").eq("clinica_id", cid).execute()
+                        if limpeza.data:
+                            for lp in limpeza.data:
+                                from datetime import date
+                                ultima = lp.get("ultima_limpeza","")
+                                alerta = "🟢"
+                                if ultima:
+                                    try:
+                                        delta_lp = (date.today() - datetime.strptime(ultima, "%Y-%m-%d").date()).days
+                                        limites = {"Diária":1,"Semanal":7,"Mensal":30}
+                                        limite = limites.get(lp.get("frequencia","Diária"), 1)
+                                        alerta = "🔴" if delta_lp >= limite else "🟢"
+                                    except:
+                                        pass
+                                with st.expander(f"{alerta} {lp['ambiente']} — {lp.get('frequencia','')}"):
+                                    st.write(f"Responsável: {lp.get('responsavel','')}")
+                                    st.write(f"Última limpeza: {ultima}")
+                                    if st.button("✅ Registrar limpeza agora", key=f"lp_{lp['id']}"):
+                                        supabase.table("escala_limpeza").update({
+                                            "ultima_limpeza": datetime.now().strftime("%Y-%m-%d")
+                                        }).eq("id", lp["id"]).execute()
+                                        st.success("Limpeza registrada!")
+                                        st.rerun()
+                        else:
+                            st.info("Nenhum ambiente cadastrado.")
+                    except:
+                        st.info("Crie a tabela escala_limpeza no Supabase para ativar.")
+
+            # ── 7. ANVISA ────────────────────────────────────────────
+            with aba_f[6]:
+                st.caption("Gere documentos e checklists padrão exigidos pela vigilância sanitária.")
+                doc_tipo = st.selectbox("Selecione o documento:", [
+                    "Checklist de Boas Práticas — RDC 216",
+                    "Planilha de Controle de Temperatura",
+                    "Registro de Higienização de Superfícies",
+                    "Ficha de Controle de Pragas",
+                    "Relatório de Descarte de Resíduos"
                 ])
-                simbolos = {
-                    "Cuidado: Vidro Quebrado": "⚠️ 💥",
-                    "Atenção: Piso Molhado": "⚠️ 💧",
-                    "Perigo: Risco Biológico": "☣️",
-                    "Aviso: Equipamento em Manutenção": "🛑 🔧"
-                }
-                simbolo = simbolos[tipo]
-                desc = st.text_area("Instruções adicionais:", "Por favor, mantenha distância.")
 
-            with col_p:
-                html_placa = f"""
-                <div id="placa" style="border:8px solid #dc2626;padding:2rem;text-align:center;
-                border-radius:16px;background:#fef2f2;font-family:'DM Sans',sans-serif;">
-                    <div style="font-size:4rem;line-height:1;">{simbolo}</div>
-                    <div style="color:#dc2626;font-weight:700;font-size:1.8rem;
-                    text-transform:uppercase;margin-top:1rem;">{tipo}</div>
-                    <div style="font-size:1rem;color:#374151;margin-top:1rem;">{desc}</div>
-                </div>
-                <div style="text-align:center;margin-top:1rem;">
-                    <button onclick="imprimir()" style="padding:12px 28px;font-size:1rem;
-                    font-weight:600;background:#dc2626;color:white;border:none;
-                    border-radius:10px;cursor:pointer;">🖨️ Imprimir</button>
-                </div>
-                <script>
-                function imprimir(){{
-                    var c=document.getElementById('placa').innerHTML;
-                    var w=window.open('','','height=700,width=700');
-                    w.document.write('<html><head><title>Sinalização</title>');
-                    w.document.write('<style>body{{display:flex;justify-content:center;align-items:center;height:90vh;margin:0;font-family:sans-serif;}}');
-                    w.document.write('#c{{border:12px solid #dc2626;padding:3rem;text-align:center;border-radius:16px;background:#fef2f2;width:75%;}}');
-                    w.document.write('</style></head><body><div id="c">'+c+'</div></body></html>');
-                    w.document.close();w.focus();
-                    setTimeout(function(){{w.print();w.close();}},400);
-                }}
-                </script>
-                """
-                st.components.v1.html(html_placa, height=400)
+                conteudos_anvisa = {
+                    "Checklist de Boas Práticas — RDC 216": [
+                        "Instalações físicas em bom estado de conservação",
+                        "Equipamentos higienizados e em funcionamento",
+                        "Manipuladores com EPIs adequados",
+                        "Produtos de limpeza identificados e armazenados",
+                        "Lixo acondicionado em recipientes com tampa",
+                        "Controle de pragas atualizado",
+                        "Água potável disponível",
+                    ],
+                    "Planilha de Controle de Temperatura": [
+                        "Temperatura da geladeira de medicamentos (2-8°C)",
+                        "Temperatura ambiente da sala de procedimentos (máx 24°C)",
+                        "Temperatura do esterilizador verificada",
+                        "Registro de horário da aferição",
+                        "Responsável pela aferição identificado",
+                    ],
+                    "Registro de Higienização de Superfícies": [
+                        "Bancadas higienizadas com produto adequado",
+                        "Macas e cadeiras limpas entre atendimentos",
+                        "Piso limpo e seco",
+                        "Banheiros higienizados",
+                        "Maçanetas e interruptores desinfectados",
+                    ],
+                    "Ficha de Controle de Pragas": [
+                        "Data da última dedetização registrada",
+                        "Empresa responsável identificada",
+                        "Certificado de dedetização arquivado",
+                        "Ausência de evidências de pragas",
+                        "Ralos e frestas vedados",
+                    ],
+                    "Relatório de Descarte de Resíduos": [
+                        "Resíduos biológicos em saco branco leitoso",
+                        "Perfurocortantes em coletor rígido",
+                        "Empresa coletora credenciada contratada",
+                        "Manifesto de transporte preenchido",
+                        "Registro de coleta arquivado",
+                    ],
+                }
+
+                itens_anvisa = conteudos_anvisa[doc_tipo]
+                resp_anvisa  = st.text_input("Responsável pelo preenchimento:")
+                checks_anvisa = {}
+                st.markdown("**Itens de verificação:**")
+                for item in itens_anvisa:
+                    checks_anvisa[item] = st.checkbox(item, key=f"anvisa_{item}")
+
+                col_an1, col_an2 = st.columns(2)
+                with col_an1:
+                    if st.button("✅ Salvar registro", type="primary", use_container_width=True):
+                        st.success(f"Documento '{doc_tipo}' salvo para {resp_anvisa or 'responsável'}!")
+
+                with col_an2:
+                    html_anvisa = f"""
+                    <button onclick="imprimirAnvisa()" style="width:100%;padding:10px;font-size:0.95rem;
+                    font-weight:600;background:#0f172a;color:white;border:none;border-radius:10px;cursor:pointer;">
+                    🖨️ Imprimir documento</button>
+                    <div id="conteudo-anvisa" style="display:none">
+                        <h2>{doc_tipo}</h2>
+                        <p>Responsável: {resp_anvisa or '_______________'} &nbsp; Data: {datetime.now().strftime('%d/%m/%Y')}</p>
+                        <ul>{''.join(f'<li>{"✅" if checks_anvisa.get(i) else "☐"} {i}</li>' for i in itens_anvisa)}</ul>
+                        <p style="margin-top:2rem">Assinatura: _______________________</p>
+                    </div>
+                    <script>
+                    function imprimirAnvisa(){{
+                        var c=document.getElementById('conteudo-anvisa').innerHTML;
+                        var w=window.open('','','height=800,width=700');
+                        w.document.write('<html><head><title>{doc_tipo}</title>');
+                        w.document.write('<style>body{{font-family:Arial,sans-serif;padding:2rem;}}h2{{color:#0f172a;}}li{{margin:8px 0;font-size:14px;}}p{{color:#374151;}}</style>');
+                        w.document.write('</head><body>'+c+'</body></html>');
+                        w.document.close();w.focus();
+                        setTimeout(function(){{w.print();w.close();}},400);
+                    }}
+                    </script>
+                    """
+                    st.components.v1.html(html_anvisa, height=60)
 
         # === CONFIGURAÇÕES ===
         elif menu == "⚙️ Configurações":
