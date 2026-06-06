@@ -5,6 +5,7 @@ import urllib.parse
 import time
 import requests
 import os
+import bcrypt
 from datetime import datetime, timedelta
 
 st.set_page_config(
@@ -453,10 +454,23 @@ else:
 
                 if submit:
                     email_limpo = email.strip().lower()
+                    # Busca só pelo email — nunca compara senha direto no banco
                     resp = supabase.table("usuarios").select("*") \
-                        .eq("email", email_limpo).eq("senha", senha).execute()
+                        .eq("email", email_limpo).execute()
+                    usuario_valido = False
                     if resp.data:
                         u = resp.data[0]
+                        senha_hash = u.get("senha", "")
+                        try:
+                            # Verifica se é hash bcrypt (começa com $2b$)
+                            if senha_hash.startswith("$2b$") or senha_hash.startswith("$2a$"):
+                                usuario_valido = bcrypt.checkpw(senha.encode("utf-8"), senha_hash.encode("utf-8"))
+                            else:
+                                # Fallback: senha ainda em texto puro (usuários não migrados)
+                                usuario_valido = (senha == senha_hash)
+                        except Exception:
+                            usuario_valido = False
+                    if usuario_valido:
                         st.session_state.autenticado  = True
                         st.session_state.clinica_id   = u["clinica_id"]
                         st.session_state.usuario_nome = u["nome"]
@@ -789,10 +803,15 @@ CREATE TABLE historico_consultas (
                         if existe.data:
                             st.error("E-mail já cadastrado.")
                         elif n_nome and n_senha:
+                            # Gera hash bcrypt antes de salvar
+                            senha_hash = bcrypt.hashpw(
+                                n_senha.encode("utf-8"),
+                                bcrypt.gensalt()
+                            ).decode("utf-8")
                             supabase.table("usuarios").insert({
                                 "clinica_id": cid, "nome": n_nome,
                                 "email": n_email.strip().lower(),
-                                "senha": n_senha, "perfil": n_perf
+                                "senha": senha_hash, "perfil": n_perf
                             }).execute()
                             st.success(f"✅ Conta de {n_nome} criada!")
                             st.rerun()
