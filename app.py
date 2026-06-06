@@ -454,23 +454,21 @@ else:
 
                 if submit:
                     email_limpo = email.strip().lower()
-                    # Busca só pelo email — nunca compara senha direto no banco
-                    resp = supabase.table("usuarios").select("*") \
-                        .eq("email", email_limpo).execute()
                     usuario_valido = False
-                    if resp.data:
-                        u = resp.data[0]
-                        senha_hash = u.get("senha", "")
-                        try:
-                            # Verifica se é hash bcrypt (começa com $2b$)
+                    u = None
+                    try:
+                        # Usa a função RPC que bypassa o RLS para o login
+                        resp = supabase.rpc("buscar_usuario_login", {"p_email": email_limpo}).execute()
+                        if resp.data:
+                            u = resp.data[0]
+                            senha_hash = u.get("senha", "")
                             if senha_hash.startswith("$2b$") or senha_hash.startswith("$2a$"):
                                 usuario_valido = bcrypt.checkpw(senha.encode("utf-8"), senha_hash.encode("utf-8"))
                             else:
-                                # Fallback: senha ainda em texto puro (usuários não migrados)
                                 usuario_valido = (senha == senha_hash)
-                        except Exception:
-                            usuario_valido = False
-                    if usuario_valido:
+                    except Exception as e:
+                        st.error(f"Erro ao autenticar: {e}")
+                    if usuario_valido and u:
                         st.session_state.autenticado  = True
                         st.session_state.clinica_id   = u["clinica_id"]
                         st.session_state.usuario_nome = u["nome"]
@@ -478,7 +476,8 @@ else:
                             else str(u.get("perfil", "Recepcao")).strip().capitalize()
                         st.rerun()
                     else:
-                        st.error("E-mail ou senha incorretos.")
+                        if not usuario_valido:
+                            st.error("E-mail ou senha incorretos.")
 
     # --- PAINEL INTERNO ---
     else:
