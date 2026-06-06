@@ -1316,13 +1316,97 @@ CREATE TABLE historico_consultas (
 
                 # Dados da clínica para cabeçalho institucional
                 st.markdown("**Dados da clínica (aparecem no documento impresso):**")
+
+                # Busca automática por CNPJ
+                col_cnpj, col_btn = st.columns([3, 1])
+                with col_cnpj:
+                    anvisa_cnpj = st.text_input("CNPJ", placeholder="Ex: 00.000.000/0001-00",
+                                                key="anvisa_cnpj_input")
+                with col_btn:
+                    st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+                    buscar_cnpj = st.button("🔍 Buscar", use_container_width=True)
+
+                # Inicializa dados no session_state
+                if "anvisa_dados" not in st.session_state:
+                    st.session_state.anvisa_dados = {
+                        "nome": "", "endereco": "", "municipio": "",
+                        "uf": "", "situacao": ""
+                    }
+
+                if buscar_cnpj and anvisa_cnpj:
+                    cnpj_limpo = "".join(filter(str.isdigit, anvisa_cnpj))
+                    if len(cnpj_limpo) == 14:
+                        with st.spinner("Consultando Receita Federal..."):
+                            try:
+                                resp_cnpj = requests.get(
+                                    f"https://publica.cnpj.ws/cnpj/{cnpj_limpo}",
+                                    timeout=8,
+                                    headers={"User-Agent": "ClinicFlow/1.0"}
+                                )
+                                if resp_cnpj.status_code == 200:
+                                    dados = resp_cnpj.json()
+                                    end = dados.get("estabelecimento", {})
+                                    logradouro = end.get("logradouro","")
+                                    numero     = end.get("numero","")
+                                    bairro     = end.get("bairro","")
+                                    municipio  = end.get("cidade",{}).get("nome","") if isinstance(end.get("cidade"), dict) else ""
+                                    uf         = end.get("estado",{}).get("sigla","") if isinstance(end.get("estado"), dict) else ""
+                                    cep        = end.get("cep","")
+                                    razao      = dados.get("razao_social","")
+                                    fantasia   = end.get("nome_fantasia","") or razao
+                                    situacao   = end.get("situacao_cadastral","")
+
+                                    st.session_state.anvisa_dados = {
+                                        "nome": fantasia or razao,
+                                        "endereco": f"{logradouro}, {numero} — {bairro}, {municipio}/{uf} — CEP {cep}",
+                                        "municipio": municipio,
+                                        "uf": uf,
+                                        "situacao": situacao
+                                    }
+
+                                    if situacao == "Ativa":
+                                        st.success(f"✅ CNPJ encontrado: **{razao}** — Situação: {situacao}")
+                                    else:
+                                        st.warning(f"⚠️ CNPJ encontrado mas situação: {situacao}")
+                                elif resp_cnpj.status_code == 429:
+                                    st.warning("⏳ Limite de consultas atingido. Aguarde 1 minuto e tente novamente.")
+                                else:
+                                    st.error(f"CNPJ não encontrado (status {resp_cnpj.status_code}).")
+                            except Exception as e:
+                                st.error(f"Erro na consulta: {e}")
+                    else:
+                        st.warning("CNPJ inválido — deve ter 14 dígitos.")
+
+                # Campos preenchidos automaticamente (editáveis)
                 col_clin1, col_clin2 = st.columns(2)
                 with col_clin1:
-                    anvisa_nome_clinica = st.text_input("Nome da clínica", placeholder="Ex: Clínica Modelo Ltda")
-                    anvisa_cnpj         = st.text_input("CNPJ", placeholder="Ex: 00.000.000/0001-00")
+                    anvisa_nome_clinica = st.text_input(
+                        "Nome da clínica",
+                        value=st.session_state.anvisa_dados["nome"],
+                        placeholder="Ex: Clínica Modelo Ltda"
+                    )
                 with col_clin2:
-                    anvisa_endereco     = st.text_input("Endereço completo", placeholder="Ex: Rua das Flores, 123 — Goiânia/GO")
-                    anvisa_alvara       = st.text_input("Nº Alvará Sanitário", placeholder="Ex: AS-2024-00123")
+                    anvisa_alvara = st.text_input(
+                        "Nº Alvará Sanitário",
+                        placeholder="Ex: AS-2024-00123"
+                    )
+                anvisa_endereco = st.text_input(
+                    "Endereço completo",
+                    value=st.session_state.anvisa_dados["endereco"],
+                    placeholder="Ex: Rua das Flores, 123 — Goiânia/GO"
+                )
+
+                # Badge de situação cadastral
+                if st.session_state.anvisa_dados.get("situacao"):
+                    sit = st.session_state.anvisa_dados["situacao"]
+                    cor = "#dcfce7" if sit == "Ativa" else "#fef9c3"
+                    cor_txt = "#166534" if sit == "Ativa" else "#854d0e"
+                    st.markdown(
+                        f'<div style="display:inline-block;background:{cor};color:{cor_txt};'
+                        f'font-size:0.75rem;padding:3px 12px;border-radius:99px;font-weight:500;margin-bottom:8px;">'
+                        f'Situação cadastral: {sit}</div>',
+                        unsafe_allow_html=True
+                    )
 
                 st.markdown("**Responsável e itens:**")
                 resp_anvisa  = st.text_input("Responsável pelo preenchimento:")
