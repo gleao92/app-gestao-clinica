@@ -1313,37 +1313,157 @@ CREATE TABLE historico_consultas (
                 }
 
                 itens_anvisa = conteudos_anvisa[doc_tipo]
+
+                # Dados da clínica para cabeçalho institucional
+                st.markdown("**Dados da clínica (aparecem no documento impresso):**")
+                col_clin1, col_clin2 = st.columns(2)
+                with col_clin1:
+                    anvisa_nome_clinica = st.text_input("Nome da clínica", placeholder="Ex: Clínica Modelo Ltda")
+                    anvisa_cnpj         = st.text_input("CNPJ", placeholder="Ex: 00.000.000/0001-00")
+                with col_clin2:
+                    anvisa_endereco     = st.text_input("Endereço completo", placeholder="Ex: Rua das Flores, 123 — Goiânia/GO")
+                    anvisa_alvara       = st.text_input("Nº Alvará Sanitário", placeholder="Ex: AS-2024-00123")
+
+                st.markdown("**Responsável e itens:**")
                 resp_anvisa  = st.text_input("Responsável pelo preenchimento:")
                 checks_anvisa = {}
-                st.markdown("**Itens de verificação:**")
                 for item in itens_anvisa:
                     checks_anvisa[item] = st.checkbox(item, key=f"anvisa_{item}")
+
+                # Referências legais por documento
+                refs_legais = {
+                    "Checklist de Boas Práticas — RDC 216": "RDC ANVISA nº 216/2004 — Boas Práticas para Serviços de Alimentação",
+                    "Planilha de Controle de Temperatura": "RDC ANVISA nº 430/2020 — Armazenamento de Medicamentos",
+                    "Registro de Higienização de Superfícies": "RDC ANVISA nº 15/2012 — Limpeza e Esterilização",
+                    "Ficha de Controle de Pragas": "RDC ANVISA nº 52/2009 — Controle de Pragas Urbanas",
+                    "Relatório de Descarte de Resíduos": "RDC ANVISA nº 222/2018 — Resíduos de Serviços de Saúde",
+                }
+                ref_legal = refs_legais.get(doc_tipo, "Legislação sanitária vigente")
+                data_doc  = datetime.now().strftime("%d/%m/%Y")
+                hora_doc  = datetime.now().strftime("%H:%M")
+
+                itens_html = "".join(
+                    f'<tr><td style="padding:6px 8px;border-bottom:1px solid #f1f5f9;">'
+                    f'{"✅" if checks_anvisa.get(i) else "☐"}</td>'
+                    f'<td style="padding:6px 8px;border-bottom:1px solid #f1f5f9;font-size:13px;">{i}</td></tr>'
+                    for i in itens_anvisa
+                )
 
                 col_an1, col_an2 = st.columns(2)
                 with col_an1:
                     if st.button("✅ Salvar registro", type="primary", use_container_width=True):
-                        st.success(f"Documento '{doc_tipo}' salvo para {resp_anvisa or 'responsável'}!")
+                        st.success(f"Documento '{doc_tipo}' salvo!")
 
                 with col_an2:
                     html_anvisa = f"""
                     <button onclick="imprimirAnvisa()" style="width:100%;padding:10px;font-size:0.95rem;
                     font-weight:600;background:#0f172a;color:white;border:none;border-radius:10px;cursor:pointer;">
                     🖨️ Imprimir documento</button>
-                    <div id="conteudo-anvisa" style="display:none">
-                        <h2>{doc_tipo}</h2>
-                        <p>Responsável: {resp_anvisa or '_______________'} &nbsp; Data: {datetime.now().strftime('%d/%m/%Y')}</p>
-                        <ul>{''.join(f'<li>{"✅" if checks_anvisa.get(i) else "☐"} {i}</li>' for i in itens_anvisa)}</ul>
-                        <p style="margin-top:2rem">Assinatura: _______________________</p>
+
+                    <div id="conteudo-anvisa" style="display:none;">
+                        <!-- CABEÇALHO INSTITUCIONAL -->
+                        <div id="cabecalho">
+                            <table width="100%" style="border-collapse:collapse;margin-bottom:0;">
+                                <tr>
+                                    <td style="width:80px;vertical-align:middle;">
+                                        <div style="width:70px;height:70px;background:#0f172a;border-radius:8px;
+                                        display:flex;align-items:center;justify-content:center;
+                                        color:white;font-size:28px;font-weight:900;text-align:center;
+                                        font-family:Arial,sans-serif;line-height:1;">+</div>
+                                    </td>
+                                    <td style="vertical-align:middle;padding-left:16px;">
+                                        <div style="font-size:18px;font-weight:700;color:#0f172a;font-family:Arial,sans-serif;">
+                                            {anvisa_nome_clinica or 'Nome da Clínica'}
+                                        </div>
+                                        <div style="font-size:12px;color:#64748b;font-family:Arial,sans-serif;margin-top:2px;">
+                                            CNPJ: {anvisa_cnpj or '00.000.000/0001-00'} &nbsp;|&nbsp;
+                                            Alvará: {anvisa_alvara or 'AS-0000-00000'}
+                                        </div>
+                                        <div style="font-size:12px;color:#64748b;font-family:Arial,sans-serif;">
+                                            {anvisa_endereco or 'Endereço da Clínica'}
+                                        </div>
+                                    </td>
+                                    <td style="text-align:right;vertical-align:middle;">
+                                        <div style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;">
+                                            DOCUMENTO DE USO INTERNO
+                                        </div>
+                                        <div style="font-size:11px;color:#64748b;font-family:Arial,sans-serif;">
+                                            Data: {data_doc} &nbsp; Hora: {hora_doc}
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+                            <div style="height:3px;background:#0f172a;margin:12px 0 4px;border-radius:2px;"></div>
+                            <div style="height:1px;background:#e2e8f0;margin-bottom:16px;"></div>
+
+                            <!-- TÍTULO DO DOCUMENTO -->
+                            <div style="text-align:center;margin-bottom:16px;">
+                                <div style="font-size:15px;font-weight:700;color:#0f172a;
+                                font-family:Arial,sans-serif;text-transform:uppercase;
+                                letter-spacing:0.05em;">{doc_tipo}</div>
+                                <div style="font-size:10px;color:#64748b;font-family:Arial,sans-serif;
+                                margin-top:4px;">Referência legal: {ref_legal}</div>
+                            </div>
+
+                            <!-- ITENS DE VERIFICAÇÃO -->
+                            <table width="100%" style="border-collapse:collapse;margin-bottom:20px;
+                            border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+                                <thead>
+                                    <tr style="background:#f8fafc;">
+                                        <th style="padding:8px;text-align:left;font-size:12px;
+                                        color:#64748b;font-family:Arial,sans-serif;width:40px;">OK</th>
+                                        <th style="padding:8px;text-align:left;font-size:12px;
+                                        color:#64748b;font-family:Arial,sans-serif;">Item de verificação</th>
+                                    </tr>
+                                </thead>
+                                <tbody>{itens_html}</tbody>
+                            </table>
+
+                            <!-- RODAPÉ COM ASSINATURAS -->
+                            <div style="height:1px;background:#e2e8f0;margin:20px 0;"></div>
+                            <table width="100%" style="border-collapse:collapse;">
+                                <tr>
+                                    <td style="width:45%;padding:8px 0;">
+                                        <div style="border-top:1px solid #0f172a;padding-top:6px;
+                                        font-size:11px;color:#374151;font-family:Arial,sans-serif;">
+                                            Responsável: {resp_anvisa or '___________________'}
+                                        </div>
+                                    </td>
+                                    <td style="width:10%;"></td>
+                                    <td style="width:45%;padding:8px 0;">
+                                        <div style="border-top:1px solid #0f172a;padding-top:6px;
+                                        font-size:11px;color:#374151;font-family:Arial,sans-serif;">
+                                            Assinatura: ___________________
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+                            <div style="margin-top:16px;padding:8px;background:#f8fafc;
+                            border-radius:6px;border:1px solid #e2e8f0;">
+                                <div style="font-size:9px;color:#94a3b8;font-family:Arial,sans-serif;
+                                text-align:center;">
+                                    Documento gerado em {data_doc} às {hora_doc} via ClinicFlow &nbsp;|&nbsp;
+                                    {ref_legal} &nbsp;|&nbsp; Documento de uso interno — não substitui laudos oficiais
+                                </div>
+                            </div>
+                        </div>
                     </div>
+
                     <script>
                     function imprimirAnvisa(){{
-                        var c=document.getElementById('conteudo-anvisa').innerHTML;
-                        var w=window.open('','','height=800,width=700');
+                        var c = document.getElementById('cabecalho').innerHTML;
+                        var w = window.open('', '', 'height=900,width=750');
                         w.document.write('<html><head><title>{doc_tipo}</title>');
-                        w.document.write('<style>body{{font-family:Arial,sans-serif;padding:2rem;}}h2{{color:#0f172a;}}li{{margin:8px 0;font-size:14px;}}p{{color:#374151;}}</style>');
-                        w.document.write('</head><body>'+c+'</body></html>');
-                        w.document.close();w.focus();
-                        setTimeout(function(){{w.print();w.close();}},400);
+                        w.document.write('<style>');
+                        w.document.write('@page{{margin:20mm;}}');
+                        w.document.write('body{{font-family:Arial,sans-serif;padding:0;margin:0;color:#0f172a;}}');
+                        w.document.write('table{{border-collapse:collapse;}}');
+                        w.document.write('</style></head><body>');
+                        w.document.write(c);
+                        w.document.write('</body></html>');
+                        w.document.close();
+                        w.focus();
+                        setTimeout(function(){{ w.print(); w.close(); }}, 500);
                     }}
                     </script>
                     """
