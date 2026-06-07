@@ -701,9 +701,46 @@ else:
                         st.info("Sem pacientes na agenda.")
                 with col_fila_col:
                     st.markdown("**📋 Fila de espera**")
-                    base_url = "https://seuapp.com.br"
-                    st.code(f"{base_url}/?view=agendar", language="text")
-                    st.caption("Cole na bio do Instagram.")
+
+                    # Detecta domínio real automaticamente
+                    try:
+                        from streamlit.web.server.websocket_headers import _get_websocket_headers
+                        headers = _get_websocket_headers()
+                        host = headers.get("Host", "seuapp.com.br")
+                    except:
+                        try:
+                            import streamlit.runtime.scriptrunner as sr
+                            ctx = sr.get_script_run_ctx()
+                            host = getattr(ctx, "query_string", "") or "seuapp.com.br"
+                        except:
+                            host = "seuapp.com.br"
+
+                    # Fallback para variável de ambiente (Railway/produção)
+                    base_url = os.environ.get("APP_URL", f"https://{host}")
+                    if not base_url.startswith("http"):
+                        base_url = f"https://{base_url}"
+                    link_publico = f"{base_url}/?view=agendar"
+
+                    # Gera QR code via API pública
+                    qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=160x160&data={urllib.parse.quote(link_publico)}"
+
+                    st.markdown(f"""
+                    <div style="background:white;border:1px solid #e2e8f0;border-radius:14px;
+                    padding:1rem;margin-bottom:1rem;text-align:center;">
+                        <div style="font-size:0.75rem;color:#64748b;margin-bottom:8px;
+                        text-transform:uppercase;letter-spacing:0.06em;">QR Code de agendamento</div>
+                        <img src="{qr_url}" width="140" style="border-radius:8px;" />
+                        <div style="font-size:0.72rem;color:#94a3b8;margin-top:8px;
+                        word-break:break-all;">{link_publico}</div>
+                        <div style="margin-top:10px;">
+                            <a href="{link_publico}" target="_blank"
+                            style="font-size:0.78rem;color:#1d4ed8;font-weight:500;text-decoration:none;">
+                            🔗 Abrir portal →</a>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    st.caption("Imprima o QR code e coloque na recepção.")
+
                     if fila:
                         for p in fila:
                             st.markdown(f"""<div style="background:white;border:1px solid #e2e8f0;border-radius:10px;padding:8px 12px;margin-bottom:6px;"><div style="font-weight:500;color:#0f172a;font-size:0.85rem;">#{p['posicao']} — {p['paciente_nome']}</div><div style="font-size:0.78rem;color:#64748b;">📞 {p['telefone']}</div></div>""", unsafe_allow_html=True)
