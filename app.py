@@ -288,58 +288,95 @@ else:
             st.session_state[k] = v
 
     if not st.session_state.autenticado:
+        # Layout: coluna esquerda = painel escuro | coluna direita = formulário
         st.markdown("""
         <style>
-        .login-outer { display:flex;min-height:100vh;align-items:center;justify-content:center;background:#f0f4f8;padding:2rem 1rem; }
-        .login-card { display:flex;width:100%;max-width:860px;border-radius:20px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.12); }
-        .login-left { background:#060d1f;width:52%;padding:2.8rem;display:flex;flex-direction:column;justify-content:space-between; }
-        .login-right { background:#ffffff;width:48%;padding:2.8rem;display:flex;flex-direction:column;justify-content:center; }
-        .login-brand { display:flex;align-items:center;gap:10px;margin-bottom:2.5rem; }
-        .login-logo { width:38px;height:38px;background:#1d4ed8;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.2rem; }
-        .login-brand-name { font-size:1.05rem;font-weight:700;color:#f1f5f9;font-family:'DM Sans',sans-serif; }
-        .login-hero { font-size:1.65rem;font-weight:700;color:#f1f5f9;line-height:1.3;margin-bottom:0.9rem;font-family:'DM Sans',sans-serif; }
+        /* Remove padding padrão do Streamlit na tela de login */
+        .block-container { padding-top: 2rem !important; padding-bottom: 2rem !important; }
+
+        /* Painel esquerdo escuro */
+        .login-left-panel {
+            background: #060d1f;
+            border-radius: 20px 0 0 20px;
+            padding: 2.8rem;
+            min-height: 520px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        /* Painel direito branco */
+        .login-right-panel {
+            background: #ffffff;
+            border-radius: 0 20px 20px 0;
+            padding: 2.8rem 2.4rem;
+            min-height: 520px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.12);
+        }
+        .login-brand { display:flex;align-items:center;gap:10px;margin-bottom:2.2rem; }
+        .login-logo { width:36px;height:36px;background:#1d4ed8;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.1rem; }
+        .login-brand-name { font-size:1rem;font-weight:700;color:#f1f5f9;font-family:'DM Sans',sans-serif; }
+        .login-hero { font-size:1.6rem;font-weight:700;color:#f1f5f9;line-height:1.3;margin-bottom:0.8rem;font-family:'DM Sans',sans-serif; }
         .login-hero span { color:#3b82f6; }
-        .login-sub { font-size:0.83rem;color:#64748b;line-height:1.65;margin-bottom:2rem;font-family:'DM Sans',sans-serif; }
-        .login-stats { display:flex;gap:10px;margin-bottom:2rem; }
-        .login-stat { background:rgba(255,255,255,0.04);border:0.5px solid rgba(255,255,255,0.08);border-radius:10px;padding:10px 14px;flex:1; }
-        .login-stat-val { font-size:1.2rem;font-weight:700;color:#f1f5f9;font-family:'DM Sans',sans-serif; }
-        .login-stat-label { font-size:0.7rem;color:#64748b;margin-top:2px;font-family:'DM Sans',sans-serif; }
+        .login-sub { font-size:0.82rem;color:#64748b;line-height:1.65;margin-bottom:1.8rem;font-family:'DM Sans',sans-serif; }
+        .login-stats { display:flex;gap:8px;margin-bottom:2rem; }
+        .login-stat { background:rgba(255,255,255,0.04);border:0.5px solid rgba(255,255,255,0.08);border-radius:10px;padding:10px 12px;flex:1; }
+        .login-stat-val { font-size:1.15rem;font-weight:700;color:#f1f5f9;font-family:'DM Sans',sans-serif; }
+        .login-stat-label { font-size:0.68rem;color:#64748b;margin-top:2px;font-family:'DM Sans',sans-serif; }
         .login-dots { display:flex;gap:6px; }
         .login-dot { width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,0.15); }
         .login-dot-active { width:18px;height:6px;border-radius:99px;background:#3b82f6; }
         .login-tag { display:inline-block;font-size:0.7rem;background:#dbeafe;color:#1e40af;padding:3px 10px;border-radius:99px;font-weight:500;margin-bottom:1rem;font-family:'DM Sans',sans-serif; }
-        .login-title { font-size:1.3rem;font-weight:700;color:#0f172a;margin-bottom:0.3rem;font-family:'DM Sans',sans-serif; }
-        .login-subtitle { font-size:0.85rem;color:#64748b;margin-bottom:1.8rem;font-family:'DM Sans',sans-serif; }
-        .login-badges { display:flex;gap:8px;flex-wrap:wrap;margin-top:1.2rem; }
+        .login-title { font-size:1.3rem;font-weight:700;color:#0f172a;margin-bottom:0.25rem;font-family:'DM Sans',sans-serif; }
+        .login-subtitle { font-size:0.85rem;color:#64748b;margin-bottom:1.6rem;font-family:'DM Sans',sans-serif; }
+        .login-badges { display:flex;gap:8px;flex-wrap:wrap;margin-top:1rem; }
         .login-badge { display:flex;align-items:center;gap:5px;background:#f1f5f9;border-radius:99px;padding:4px 10px;font-size:0.72rem;color:#475569;font-family:'DM Sans',sans-serif; }
-        @media (max-width:640px) { .login-left { display:none; } .login-right { width:100%; } }
         </style>
-        <div class="login-outer"><div class="login-card">
-          <div class="login-left">
-            <div>
-              <div class="login-brand"><div class="login-logo">🏥</div><span class="login-brand-name">ClinicFlow</span></div>
-              <div class="login-hero">Sua clínica <span>nunca mais</span> perde uma consulta</div>
-              <div class="login-sub">Gestão inteligente com substituição automática de cancelamentos, fila de espera e notificações por WhatsApp.</div>
-              <div class="login-stats">
-                <div class="login-stat"><div class="login-stat-val">R$3.9k</div><div class="login-stat-label">recuperado/mês</div></div>
-                <div class="login-stat"><div class="login-stat-val">-68%</div><div class="login-stat-label">vagas perdidas</div></div>
-                <div class="login-stat"><div class="login-stat-val">26</div><div class="login-stat-label">encaixes/mês</div></div>
-              </div>
-            </div>
-            <div class="login-dots"><div class="login-dot-active"></div><div class="login-dot"></div><div class="login-dot"></div></div>
-          </div>
-          <div class="login-right">
-            <div class="login-tag">✦ Acesso seguro</div>
-            <div class="login-title">Bem-vindo de volta</div>
-            <div class="login-subtitle">Acesse o painel da sua clínica</div>
         """, unsafe_allow_html=True)
 
-        col_esp1, col_form, col_esp2 = st.columns([0.15, 3, 0.15])
-        with col_form:
+        col_left, col_right = st.columns([1.1, 1])
+
+        # PAINEL ESQUERDO — marketing
+        with col_left:
+            st.markdown("""
+            <div class="login-left-panel">
+              <div>
+                <div class="login-brand">
+                  <div class="login-logo">🏥</div>
+                  <span class="login-brand-name">ClinicFlow</span>
+                </div>
+                <div class="login-hero">Sua clínica <span>nunca mais</span> perde uma consulta</div>
+                <div class="login-sub">Gestão inteligente com substituição automática de cancelamentos, fila de espera e notificações por WhatsApp.</div>
+                <div class="login-stats">
+                  <div class="login-stat"><div class="login-stat-val">R$3.9k</div><div class="login-stat-label">recuperado/mês</div></div>
+                  <div class="login-stat"><div class="login-stat-val">-68%</div><div class="login-stat-label">vagas perdidas</div></div>
+                  <div class="login-stat"><div class="login-stat-val">26</div><div class="login-stat-label">encaixes/mês</div></div>
+                </div>
+              </div>
+              <div class="login-dots">
+                <div class="login-dot-active"></div>
+                <div class="login-dot"></div>
+                <div class="login-dot"></div>
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # PAINEL DIREITO — formulário real do Streamlit
+        with col_right:
+            st.markdown("""
+            <div class="login-right-panel">
+              <div class="login-tag">✦ Acesso seguro</div>
+              <div class="login-title">Bem-vindo de volta</div>
+              <div class="login-subtitle">Acesse o painel da sua clínica</div>
+            </div>
+            """, unsafe_allow_html=True)
+
             with st.form("login"):
-                email = st.text_input("E-mail", placeholder="seu@email.com", label_visibility="collapsed")
-                senha = st.text_input("Senha", placeholder="••••••••", type="password", label_visibility="collapsed")
-                st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+                email = st.text_input("E-mail", placeholder="seu@email.com")
+                senha = st.text_input("Senha", placeholder="••••••••", type="password")
+                st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
                 submit = st.form_submit_button("Entrar no painel →", type="primary", use_container_width=True)
                 if submit:
                     email_limpo = email.strip().lower()
@@ -366,19 +403,14 @@ else:
                         if not usuario_valido:
                             st.error("E-mail ou senha incorretos.")
 
-        st.markdown("""
-              <div class="login-badges">
-                <div class="login-badge">🔒 Dados criptografados</div>
-                <div class="login-badge">✅ LGPD compliant</div>
-              </div>
-            </div></div></div>
-        """, unsafe_allow_html=True)
-        col_esp1b, col_linkb, col_esp2b = st.columns([0.15, 3, 0.15])
-        with col_linkb:
             st.markdown("""
-            <div style="text-align:center;margin-top:0.5rem;">
-                <span style="font-size:0.8rem;color:#64748b;">Ainda não tem conta? </span>
-                <a href="?view=cadastro" style="font-size:0.8rem;color:#1d4ed8;font-weight:500;text-decoration:none;">Cadastrar sua clínica →</a>
+            <div class="login-badges">
+              <div class="login-badge">🔒 Dados criptografados</div>
+              <div class="login-badge">✅ LGPD compliant</div>
+            </div>
+            <div style="margin-top:1rem;">
+              <span style="font-size:0.8rem;color:#64748b;">Ainda não tem conta? </span>
+              <a href="?view=cadastro" style="font-size:0.8rem;color:#1d4ed8;font-weight:500;text-decoration:none;">Cadastrar sua clínica →</a>
             </div>
             """, unsafe_allow_html=True)
 
