@@ -366,10 +366,15 @@ else:
         # PAINEL DIREITO — formulário real do Streamlit
         with col_right:
             st.markdown("""
-            <div class="login-right-panel">
-              <div class="login-tag">✦ Acesso seguro</div>
-              <div class="login-title">Bem-vindo de volta</div>
-              <div class="login-subtitle">Acesse o painel da sua clínica</div>
+            <div style="background:white;border-radius:0 20px 20px 0;padding:2.8rem 2.4rem 0.5rem 2.4rem;
+            box-shadow:0 20px 60px rgba(0,0,0,0.12);margin-bottom:-1rem;">
+              <div style="display:inline-block;font-size:0.7rem;background:#dbeafe;color:#1e40af;
+              padding:3px 10px;border-radius:99px;font-weight:500;margin-bottom:1rem;
+              font-family:'DM Sans',sans-serif;">✦ Acesso seguro</div>
+              <div style="font-size:1.3rem;font-weight:700;color:#0f172a;margin-bottom:0.25rem;
+              font-family:'DM Sans',sans-serif;">Bem-vindo de volta</div>
+              <div style="font-size:0.85rem;color:#64748b;margin-bottom:0.5rem;
+              font-family:'DM Sans',sans-serif;">Acesse o painel da sua clínica</div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -404,13 +409,21 @@ else:
                             st.error("E-mail ou senha incorretos.")
 
             st.markdown("""
-            <div class="login-badges">
-              <div class="login-badge">🔒 Dados criptografados</div>
-              <div class="login-badge">✅ LGPD compliant</div>
-            </div>
-            <div style="margin-top:1rem;">
-              <span style="font-size:0.8rem;color:#64748b;">Ainda não tem conta? </span>
-              <a href="?view=cadastro" style="font-size:0.8rem;color:#1d4ed8;font-weight:500;text-decoration:none;">Cadastrar sua clínica →</a>
+            <div style="background:white;border-radius:0 0 20px 20px;padding:0.5rem 2.4rem 2rem 2.4rem;
+            box-shadow:0 20px 60px rgba(0,0,0,0.12);margin-top:-1rem;">
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:0.8rem;">
+                <div style="display:flex;align-items:center;gap:5px;background:#f1f5f9;border-radius:99px;
+                padding:4px 10px;font-size:0.72rem;color:#475569;font-family:'DM Sans',sans-serif;">
+                  🔒 Dados criptografados</div>
+                <div style="display:flex;align-items:center;gap:5px;background:#f1f5f9;border-radius:99px;
+                padding:4px 10px;font-size:0.72rem;color:#475569;font-family:'DM Sans',sans-serif;">
+                  ✅ LGPD compliant</div>
+              </div>
+              <div>
+                <span style="font-size:0.8rem;color:#64748b;">Ainda não tem conta? </span>
+                <a href="?view=cadastro" style="font-size:0.8rem;color:#1d4ed8;font-weight:500;
+                text-decoration:none;">Cadastrar sua clínica →</a>
+              </div>
             </div>
             """, unsafe_allow_html=True)
 
