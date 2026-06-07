@@ -453,46 +453,169 @@ else:
 
         # ── DASHBOARD ──────────────────────────────────────────────
         if menu == "📊 Dashboard":
+            # Saudação baseada no horário
+            hora_atual = datetime.now().hour
+            saudacao = "Bom dia" if hora_atual < 12 else "Boa tarde" if hora_atual < 18 else "Boa noite"
+
             st.markdown(f"""
             <div class="top-bar">
                 <div>
-                    <div style="font-size:1.4rem;font-weight:700;color:#0f172a;">Bom dia, {st.session_state.usuario_nome.split()[0]} 👋</div>
-                    <div style="font-size:0.85rem;color:#64748b;">Resumo do mês atual</div>
+                    <div style="font-size:1.4rem;font-weight:700;color:#0f172a;">{saudacao}, {st.session_state.usuario_nome.split()[0]} 👋</div>
+                    <div style="font-size:0.85rem;color:#64748b;">Resumo do dia — {datetime.now().strftime("%d/%m/%Y")}</div>
                 </div>
-                <div style="font-size:0.8rem;color:#94a3b8;">{datetime.now().strftime("%d/%m/%Y")}</div>
             </div>
             """, unsafe_allow_html=True)
-            c1,c2,c3,c4 = st.columns(4)
-            c1.metric("Consultas agendadas","145","↑ 12%")
-            c2.metric("Taxa de cancelamento","18%","↓ 5%")
-            c3.metric("Vagas recuperadas","26","↑ 8")
-            c4.metric("Receita recuperada","R$ 3.900","↑ R$ 450")
+
+            # KPIs com dados reais + skeleton loading
+            with st.spinner("Carregando métricas..."):
+                try:
+                    ag_resp  = supabase.table("agenda").select("*").eq("clinica_id", cid).execute()
+                    ag_data  = ag_resp.data or []
+                    fila_kpi = supabase.table("fila_espera").select("*").eq("clinica_id", cid).execute()
+                    hist_kpi = supabase.table("historico_consultas").select("*").eq("clinica_id", cid).execute()
+
+                    total_ag   = len(ag_data)
+                    confirmados = len([a for a in ag_data if a.get("status") == "Confirmado"])
+                    cancelados  = len([a for a in ag_data if a.get("status") == "Cancelado"])
+                    pendentes_n = len([a for a in ag_data if a.get("status") == "Pendente"])
+                    na_fila     = len(fila_kpi.data or [])
+                    encaixes    = len([h for h in (hist_kpi.data or []) if h.get("origem") == "Encaixe via fila"])
+                    taxa_cancel = f"{round(cancelados/total_ag*100)}%" if total_ag > 0 else "0%"
+
+                    c1,c2,c3,c4 = st.columns(4)
+                    c1.metric("Consultas hoje",       total_ag,    f"{confirmados} confirmadas")
+                    c2.metric("Taxa de cancelamento", taxa_cancel, f"{cancelados} canceladas", delta_color="inverse")
+                    c3.metric("Na fila de espera",    na_fila,     "aguardando vaga")
+                    c4.metric("Encaixes realizados",  encaixes,    "via substituição automática")
+                except Exception as e:
+                    st.warning(f"Erro ao carregar métricas: {e}")
+                    c1,c2,c3,c4 = st.columns(4)
+                    c1.metric("Consultas hoje","—",""); c2.metric("Cancelamentos","—","")
+                    c3.metric("Fila de espera","—",""); c4.metric("Encaixes","—","")
+
+            # Cards de alerta rápido
             st.markdown("<br>", unsafe_allow_html=True)
+            alertas = []
+            try:
+                inv_alerta = supabase.table("inventario").select("*").eq("clinica_id", cid).execute()
+                for item in (inv_alerta.data or []):
+                    if item.get("quantidade",99) <= item.get("minimo",5):
+                        alertas.append(("🔴", f"Estoque baixo: **{item['nome']}** ({item['quantidade']} unidades)"))
+            except: pass
+            try:
+                from datetime import date
+                eq_alerta = supabase.table("equipamentos").select("*").eq("clinica_id", cid).execute()
+                for eq in (eq_alerta.data or []):
+                    if eq.get("proxima_manutencao"):
+                        delta_eq = (datetime.strptime(eq["proxima_manutencao"],"%Y-%m-%d").date()-date.today()).days
+                        if delta_eq <= 7:
+                            alertas.append(("🟡", f"Manutenção em {delta_eq}d: **{eq['nome']}**"))
+            except: pass
+            ag_pend = [a for a in ag_data if a.get("status") == "Pendente"] if ag_data else []
+            if len(ag_pend) > 0:
+                alertas.append(("🔵", f"{len(ag_pend)} consulta(s) sem confirmação hoje"))
+
+            if alertas:
+                st.markdown("#### 🔔 Alertas do dia")
+                for icon, msg in alertas[:5]:
+                    st.markdown(f"""
+                    <div style="display:flex;align-items:center;gap:10px;background:white;border:1px solid #e2e8f0;
+                    border-radius:10px;padding:10px 14px;margin-bottom:6px;">
+                        <span style="font-size:1.1rem;">{icon}</span>
+                        <span style="font-size:0.88rem;color:#374151;">{msg}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                st.markdown("<br>", unsafe_allow_html=True)
+
+            # Gráficos
             col_g1, col_g2 = st.columns([3,2])
             with col_g1:
-                st.markdown("#### 📈 Faturamento vs Receita Recuperada")
-                df_chart = pd.DataFrame({"Mês":["Jan","Fev","Mar","Abr","Mai","Jun"],"Faturamento Base (R$)":[20000,22000,21000,25000,28000,31000],"Recuperado pelo App (R$)":[0,0,0,1500,3200,3900]}).set_index("Mês")
-                st.bar_chart(df_chart)
+                st.markdown("#### 📈 Consultas por status (hoje)")
+                if ag_data:
+                    status_count = {}
+                    for a in ag_data:
+                        s = a.get("status","Pendente")
+                        status_count[s] = status_count.get(s, 0) + 1
+                    df_status = pd.DataFrame(list(status_count.items()), columns=["Status","Qtd"]).set_index("Status")
+                    st.bar_chart(df_status)
+                else:
+                    st.info("Sem dados de agenda para exibir.")
             with col_g2:
-                st.markdown("#### 📋 Cancelamentos por dia")
-                df_cancel = pd.DataFrame({"Dia":["Seg","Ter","Qua","Qui","Sex"],"Cancelamentos":[4,2,6,3,5]}).set_index("Dia")
-                st.bar_chart(df_cancel)
+                st.markdown("#### 👥 Fila de espera")
+                try:
+                    fila_dash = supabase.table("fila_espera").select("*").eq("clinica_id", cid).order("posicao").limit(5).execute()
+                    if fila_dash.data:
+                        for p in fila_dash.data:
+                            st.markdown(f"""<div style="background:white;border:1px solid #e2e8f0;border-radius:10px;
+                            padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
+                            <span style="font-size:0.85rem;font-weight:500;color:#0f172a;">#{p['posicao']} {p['paciente_nome']}</span>
+                            <span style="font-size:0.75rem;color:#64748b;">{p.get('telefone','')}</span></div>""",
+                            unsafe_allow_html=True)
+                    else:
+                        st.info("Fila vazia.")
+                except: st.info("Sem dados.")
 
         # ── AGENDA ─────────────────────────────────────────────────
         elif menu == "📅 Agenda":
-            agenda_resp = supabase.table("agenda").select("*").eq("clinica_id", cid).execute()
-            agenda_df   = pd.DataFrame(agenda_resp.data)
-            fila_resp   = supabase.table("fila_espera").select("*").eq("clinica_id", cid).order("posicao").execute()
-            fila        = fila_resp.data
-            col_ag, col_fila = st.columns([2,1])
-            with col_ag:
-                st.markdown("### 📅 Agenda de hoje")
+            # Skeleton loading
+            with st.spinner("Carregando agenda..."):
+                agenda_resp = supabase.table("agenda").select("*").eq("clinica_id", cid).execute()
+                agenda_df   = pd.DataFrame(agenda_resp.data) if agenda_resp.data else pd.DataFrame()
+                fila_resp   = supabase.table("fila_espera").select("*").eq("clinica_id", cid).order("posicao").execute()
+                fila        = fila_resp.data or []
+
+            # Abas: Grade | Lista | Adicionar
+            aba_ag = st.tabs(["🗓️ Grade horária", "📋 Lista", "➕ Novo paciente", "🔁 Recuperador"])
+
+            # ── ABA 1: GRADE HORÁRIA ──────────────────────────────
+            with aba_ag[0]:
+                st.markdown("#### 🗓️ Grade de hoje")
+                horarios = [f"{h:02d}:00" for h in range(7, 20)]
+                agenda_map = {}
                 if not agenda_df.empty:
+                    for _, row in agenda_df.iterrows():
+                        h_key = str(row.get("horario",""))[:5]
+                        agenda_map[h_key] = row
+
+                grade_html = """
+                <style>
+                .grade-wrap{display:grid;grid-template-columns:60px 1fr;gap:0;}
+                .grade-hora{font-size:0.75rem;color:#94a3b8;padding:10px 8px 10px 0;text-align:right;border-top:1px solid #f1f5f9;}
+                .grade-slot{border-top:1px solid #f1f5f9;padding:6px 8px;min-height:44px;}
+                .grade-vazio{font-size:0.75rem;color:#e2e8f0;}
+                .grade-card{border-radius:8px;padding:6px 10px;font-size:0.82rem;font-weight:500;}
+                .gc-conf{background:#dcfce7;color:#166534;}
+                .gc-pend{background:#fef9c3;color:#854d0e;}
+                .gc-canc{background:#fee2e2;color:#991b1b;}
+                </style>
+                <div class="grade-wrap">
+                """
+                for h in horarios:
+                    row = agenda_map.get(h)
+                    grade_html += f'<div class="grade-hora">{h}</div>'
+                    if row is not None:
+                        status = row.get("status","Pendente")
+                        cls = "gc-conf" if status=="Confirmado" else "gc-canc" if status=="Cancelado" else "gc-pend"
+                        icon = "✓" if status=="Confirmado" else "✗" if status=="Cancelado" else "⏳"
+                        grade_html += f'<div class="grade-slot"><div class="grade-card {cls}">{icon} {row["paciente_nome"]} <span style="font-weight:400;font-size:0.75rem;opacity:.7;">— {status}</span></div></div>'
+                    else:
+                        grade_html += '<div class="grade-slot"><span class="grade-vazio">— disponível</span></div>'
+                grade_html += "</div>"
+                st.markdown(grade_html, unsafe_allow_html=True)
+
+            # ── ABA 2: LISTA ──────────────────────────────────────
+            with aba_ag[1]:
+                st.markdown("#### 📋 Lista detalhada")
+                if not agenda_df.empty:
+                    # Filtro de status
+                    filtro_status = st.radio("Filtrar:", ["Todos","Confirmado","Pendente","Cancelado"], horizontal=True)
+                    df_filtrado = agenda_df if filtro_status == "Todos" else agenda_df[agenda_df["status"]==filtro_status]
+
                     h1,h2,h3,h4,h5 = st.columns([1,2,1.5,1.5,1.5])
                     for col,label in zip([h1,h2,h3,h4,h5],["**Horário**","**Paciente**","**Status**","**Confirmar**","**Contato**"]):
                         col.markdown(label)
                     st.divider()
-                    for _, row in agenda_df.iterrows():
+                    for _, row in df_filtrado.iterrows():
                         c1,c2,c3,c4,c5 = st.columns([1,2,1.5,1.5,1.5])
                         c1.markdown(f"🕐 `{row['horario']}`")
                         c2.write(row["paciente_nome"])
@@ -502,54 +625,90 @@ else:
                         else: c3.markdown('<span class="pill-yellow">⏳ Pendente</span>', unsafe_allow_html=True)
                         rid = row.get("id","")
                         link_confirm = f"?view=confirmar&id={rid}"
-                        c4.markdown(f'<a href="{link_confirm}" target="_blank" style="background:#dbeafe;color:#1d4ed8;padding:5px 12px;border-radius:8px;font-size:0.8rem;font-weight:500;text-decoration:none;">🔗 Enviar link</a>', unsafe_allow_html=True)
+                        c4.markdown(f'<a href="{link_confirm}" target="_blank" style="background:#dbeafe;color:#1d4ed8;padding:5px 12px;border-radius:8px;font-size:0.8rem;font-weight:500;text-decoration:none;">🔗 Link</a>', unsafe_allow_html=True)
                         tel = row.get("telefone","5511999999999")
-                        msg = urllib.parse.quote(f"Olá {row['paciente_nome']}, confirmamos sua consulta às {row['horario']}. Confirme aqui: {link_confirm}")
-                        c5.markdown(f'<a href="https://wa.me/{tel}?text={msg}" target="_blank" style="background:#dcfce7;color:#166534;padding:5px 12px;border-radius:8px;font-size:0.8rem;font-weight:500;text-decoration:none;">💬 WhatsApp</a>', unsafe_allow_html=True)
+                        msg = urllib.parse.quote(f"Olá {row['paciente_nome']}, confirmamos sua consulta às {row['horario']}.")
+                        c5.markdown(f'<a href="https://wa.me/{tel}?text={msg}" target="_blank" style="background:#dcfce7;color:#166534;padding:5px 12px;border-radius:8px;font-size:0.8rem;font-weight:500;text-decoration:none;">💬 Zap</a>', unsafe_allow_html=True)
+
                     st.divider()
-                    st.markdown("#### 🔔 Enviar lembretes (1 dia antes)")
                     pendentes = agenda_df[agenda_df["status"] != "Confirmado"]
                     st.caption(f"{len(pendentes)} consulta(s) sem confirmação")
                     if st.button("📨 Enviar lembrete para todos os pendentes", type="primary"):
                         for _, row in pendentes.iterrows():
                             tel = row.get("telefone","")
                             if tel:
-                                msg = f"Olá {row['paciente_nome']}! Lembrete: sua consulta é amanhã às {row['horario']}. Confirme respondendo SIM."
-                                disparar_whatsapp(row["paciente_nome"], tel, msg)
-                        st.success(f"✅ Lembretes enviados para {len(pendentes)} paciente(s)!")
-                    st.divider()
-                    st.markdown("#### 🔁 Recuperador de vagas")
-                    paciente_cancelar = st.selectbox("Registrar cancelamento de:", agenda_df["paciente_nome"])
-                    if st.button("⚡ Substituir automaticamente", type="primary"):
-                        if fila:
-                            sub = fila[0]
-                            horario = agenda_df.loc[agenda_df["paciente_nome"]==paciente_cancelar,"horario"].values[0]
-                            supabase.table("agenda").delete().eq("paciente_nome",paciente_cancelar).eq("clinica_id",cid).execute()
-                            supabase.table("agenda").insert({"clinica_id":cid,"horario":horario,"paciente_nome":sub["paciente_nome"],"status":"Confirmado"}).execute()
-                            supabase.table("fila_espera").delete().eq("id",sub["id"]).execute()
-                            try:
-                                supabase.table("historico_consultas").insert({"clinica_id":cid,"paciente_nome":sub["paciente_nome"],"telefone":sub["telefone"],"horario":horario,"data":datetime.now().strftime("%Y-%m-%d"),"origem":"Encaixe via fila"}).execute()
-                            except: pass
-                            msg = f"Olá {sub['paciente_nome']}! Um horário vagou às {horario}. Você foi encaixado!"
-                            disparar_whatsapp(sub["paciente_nome"], sub["telefone"], msg)
-                            st.success(f"✅ {sub['paciente_nome']} encaixado no horário das {horario}!")
-                            time.sleep(1); st.rerun()
-                        else:
-                            st.warning("Fila de espera vazia.")
+                                disparar_whatsapp(row["paciente_nome"], tel, f"Olá {row['paciente_nome']}! Lembrete: consulta amanhã às {row['horario']}.")
+                        st.success(f"✅ Lembretes enviados!")
                 else:
                     st.info("Nenhuma consulta agendada para hoje.")
-            with col_fila:
-                st.markdown("### 📋 Fila de espera")
-                base_url = "https://seuapp.com.br"
-                st.markdown("**🔗 Link de auto-agendamento:**")
-                st.code(f"{base_url}/?view=agendar", language="text")
-                st.caption("Cole na bio do Instagram ou fixe no WhatsApp.")
-                st.markdown("<br>", unsafe_allow_html=True)
-                if fila:
-                    for p in fila:
-                        st.markdown(f"""<div style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:0.8rem 1rem;margin-bottom:0.6rem;"><div style="font-weight:500;color:#0f172a;font-size:0.9rem;">#{p['posicao']} — {p['paciente_nome']}</div><div style="font-size:0.8rem;color:#64748b;margin-top:2px;">📞 {p['telefone']}</div></div>""", unsafe_allow_html=True)
-                else:
-                    st.info("Fila vazia no momento.")
+
+            # ── ABA 3: ADICIONAR PACIENTE ─────────────────────────
+            with aba_ag[2]:
+                st.markdown("#### ➕ Adicionar paciente na agenda")
+                with st.form("form_novo_paciente"):
+                    col_np1, col_np2 = st.columns(2)
+                    with col_np1:
+                        np_nome = st.text_input("Nome do paciente*", placeholder="Ex: Maria Silva")
+                        np_tel  = st.text_input("WhatsApp (com DDD)*", placeholder="Ex: 62999990000")
+                    with col_np2:
+                        horarios_livres = [h for h in [f"{h:02d}:00" for h in range(7,20)]
+                                           if h not in agenda_map]
+                        np_hora   = st.selectbox("Horário*", horarios_livres if horarios_livres else ["Sem horários livres"])
+                        np_status = st.selectbox("Status inicial:", ["Pendente","Confirmado"])
+                    np_ok = st.form_submit_button("✅ Adicionar à agenda", type="primary", use_container_width=True)
+                    if np_ok:
+                        if np_nome and np_tel and horarios_livres:
+                            try:
+                                supabase.table("agenda").insert({
+                                    "clinica_id": cid,
+                                    "paciente_nome": np_nome,
+                                    "telefone": np_tel,
+                                    "horario": np_hora,
+                                    "status": np_status
+                                }).execute()
+                                st.success(f"✅ {np_nome} adicionado às {np_hora}!")
+                                if np_status == "Confirmado":
+                                    disparar_whatsapp(np_nome, np_tel, f"Olá {np_nome}! Sua consulta foi agendada para hoje às {np_hora}.")
+                                time.sleep(1); st.rerun()
+                            except Exception as e:
+                                st.error(f"Erro: {e}")
+                        else:
+                            st.warning("Preencha nome e telefone." if np_nome else "Sem horários livres.")
+
+            # ── ABA 4: RECUPERADOR ────────────────────────────────
+            with aba_ag[3]:
+                st.markdown("#### 🔁 Recuperador de vagas")
+                col_rec, col_fila_col = st.columns([1,1])
+                with col_rec:
+                    if not agenda_df.empty:
+                        paciente_cancelar = st.selectbox("Registrar cancelamento de:", agenda_df["paciente_nome"])
+                        if st.button("⚡ Substituir automaticamente", type="primary", use_container_width=True):
+                            if fila:
+                                sub = fila[0]
+                                horario = agenda_df.loc[agenda_df["paciente_nome"]==paciente_cancelar,"horario"].values[0]
+                                supabase.table("agenda").delete().eq("paciente_nome",paciente_cancelar).eq("clinica_id",cid).execute()
+                                supabase.table("agenda").insert({"clinica_id":cid,"horario":horario,"paciente_nome":sub["paciente_nome"],"status":"Confirmado","telefone":sub.get("telefone","")}).execute()
+                                supabase.table("fila_espera").delete().eq("id",sub["id"]).execute()
+                                try:
+                                    supabase.table("historico_consultas").insert({"clinica_id":cid,"paciente_nome":sub["paciente_nome"],"telefone":sub["telefone"],"horario":horario,"data":datetime.now().strftime("%Y-%m-%d"),"origem":"Encaixe via fila"}).execute()
+                                except: pass
+                                disparar_whatsapp(sub["paciente_nome"], sub["telefone"], f"Olá {sub['paciente_nome']}! Um horário vagou às {horario}. Você foi encaixado!")
+                                st.success(f"✅ {sub['paciente_nome']} encaixado às {horario}!")
+                                time.sleep(1); st.rerun()
+                            else:
+                                st.warning("Fila de espera vazia.")
+                    else:
+                        st.info("Sem pacientes na agenda.")
+                with col_fila_col:
+                    st.markdown("**📋 Fila de espera**")
+                    base_url = "https://seuapp.com.br"
+                    st.code(f"{base_url}/?view=agendar", language="text")
+                    st.caption("Cole na bio do Instagram.")
+                    if fila:
+                        for p in fila:
+                            st.markdown(f"""<div style="background:white;border:1px solid #e2e8f0;border-radius:10px;padding:8px 12px;margin-bottom:6px;"><div style="font-weight:500;color:#0f172a;font-size:0.85rem;">#{p['posicao']} — {p['paciente_nome']}</div><div style="font-size:0.78rem;color:#64748b;">📞 {p['telefone']}</div></div>""", unsafe_allow_html=True)
+                    else:
+                        st.info("Fila vazia.")
 
         # ── PACIENTES ──────────────────────────────────────────────
         elif menu == "👤 Pacientes":
