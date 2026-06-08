@@ -6,7 +6,72 @@ import time
 import requests
 import os
 import bcrypt
+import re
+import html
+import logging
 from datetime import datetime, timedelta
+from functools import wraps
+
+# ── Logging seguro (nunca loga senhas ou tokens) ──────────────────────
+logging.basicConfig(level=logging.WARNING)
+logger = logging.getLogger("clinicflow")
+
+# ── Constantes de segurança ───────────────────────────────────────────
+MAX_LOGIN_ATTEMPTS  = 5       # bloqueio após N tentativas falhas
+LOCKOUT_SECONDS     = 300     # 5 minutos de bloqueio
+MAX_INPUT_LENGTH    = 500     # limite de caracteres em campos livres
+ALLOWED_VIEWS       = {"agendar", "confirmar", "cadastro"}  # views públicas válidas
+SESSION_TIMEOUT_MIN = 480     # 8 horas de sessão
+
+def sanitize(text: str, max_len: int = MAX_INPUT_LENGTH) -> str:
+    """Remove HTML/JS e limita tamanho de qualquer input."""
+    if not isinstance(text, str):
+        return ""
+    cleaned = html.escape(text.strip())
+    return cleaned[:max_len]
+
+def is_valid_email(email: str) -> bool:
+    return bool(re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", email))
+
+def is_valid_phone(phone: str) -> bool:
+    digits = re.sub(r"[^0-9]", "", phone)
+    return 10 <= len(digits) <= 13
+
+def check_session_timeout() -> bool:
+    """Retorna True se a sessão expirou."""
+    last = st.session_state.get("last_activity")
+    if last and (datetime.now() - last).total_seconds() > SESSION_TIMEOUT_MIN * 60:
+        return True
+    st.session_state.last_activity = datetime.now()
+    return False
+
+def check_rate_limit(email: str) -> tuple[bool, int]:
+    """Retorna (bloqueado, segundos_restantes)."""
+    key_attempts = f"attempts_{email}"
+    key_time     = f"lockout_time_{email}"
+    attempts = st.session_state.get(key_attempts, 0)
+    lockout  = st.session_state.get(key_time)
+    if lockout:
+        elapsed = (datetime.now() - lockout).total_seconds()
+        if elapsed < LOCKOUT_SECONDS:
+            return True, int(LOCKOUT_SECONDS - elapsed)
+        else:
+            st.session_state[key_attempts] = 0
+            st.session_state[key_time]     = None
+    return False, 0
+
+def register_failed_attempt(email: str):
+    key_attempts = f"attempts_{email}"
+    key_time     = f"lockout_time_{email}"
+    attempts = st.session_state.get(key_attempts, 0) + 1
+    st.session_state[key_attempts] = attempts
+    if attempts >= MAX_LOGIN_ATTEMPTS:
+        st.session_state[key_time] = datetime.now()
+        logger.warning(f"Bloqueio de login: {email} após {attempts} tentativas")
+
+def reset_attempts(email: str):
+    st.session_state[f"attempts_{email}"] = 0
+    st.session_state[f"lockout_time_{email}"] = None
 
 st.set_page_config(
     page_title="ClinicFlow — Gestão Inteligente",
@@ -91,32 +156,68 @@ st.markdown("""
 
 @st.cache_resource
 def init_connection():
-    url = os.environ.get("SUPABASE_URL") or st.secrets["SUPABASE_URL"]
-    key = os.environ.get("SUPABASE_KEY") or st.secrets["SUPABASE_KEY"]
+    url = os.environ.get("SUPABASE_URL") or st.secrets.get("SUPABASE_URL","")
+    key = os.environ.get("SUPABASE_KEY") or st.secrets.get("SUPABASE_KEY","")
+    if not url or not key:
+        st.error("⚠️ Credenciais do banco não configuradas. Verifique as variáveis de ambiente.")
+        st.stop()
     return create_client(url, key)
 
-supabase: Client = init_connection()
+try:
+    supabase: Client = init_connection()
+except Exception as e:
+    st.error("❌ Não foi possível conectar ao banco de dados. Tente novamente em instantes.")
+    logger.error(f"Erro de conexão Supabase: {e}")
+    st.stop()
 
-def disparar_whatsapp(nome, telefone, mensagem):
+def disparar_whatsapp(nome: str, telefone: str, mensagem: str):
+    """Dispara WhatsApp com validações de segurança."""
     try:
+        # Sanitiza inputs
+        nome     = sanitize(nome, 100)
+        mensagem = sanitize(mensagem, 1000)
+
         url_gw = os.environ.get("WPP_API_URL") or st.secrets.get("WPP_API_URL", "")
         token  = os.environ.get("WPP_API_KEY")  or st.secrets.get("WPP_API_KEY", "")
-        num = "".join(filter(str.isdigit, str(telefone)))
-        if not num.startswith("55") and len(num) >= 10:
+
+        if not url_gw:
+            logger.warning("WPP_API_URL não configurado")
+            return
+
+        num = re.sub(r"[^0-9]", "", str(telefone))
+        if not (10 <= len(num) <= 13):
+            logger.warning(f"Telefone inválido: {len(num)} dígitos")
+            return
+        if not num.startswith("55"):
             num = "55" + num
-        headers = {"Content-Type":"application/json","apikey":token,"Authorization":f"Bearer {token}"}
-        payload = {"number":num,"phone":num,"message":mensagem,"text":mensagem}
+
+        headers = {
+            "Content-Type": "application/json",
+            "apikey": token,
+            "Authorization": f"Bearer {token}"
+        }
+        payload = {"number": num, "phone": num, "message": mensagem, "text": mensagem}
         r = requests.post(url_gw, json=payload, headers=headers, timeout=8)
         if r.status_code in [200, 201]:
             st.toast(f"✅ WhatsApp enviado para {nome}!", icon="💬")
         else:
+            logger.warning(f"Gateway WhatsApp retornou {r.status_code}")
             st.toast(f"⚠️ Erro {r.status_code} no gateway", icon="🛑")
+    except requests.Timeout:
+        st.toast("⏳ Timeout no gateway WhatsApp", icon="⚠️")
     except Exception as e:
-        st.toast(f"❌ Falha no WhatsApp: {e}", icon="💥")
+        logger.error(f"Erro WhatsApp: {type(e).__name__}")
+        st.toast("❌ Falha no envio do WhatsApp", icon="💥")
 
 # =========================================================================
 # FLUXO PÚBLICO — AUTO-AGENDAMENTO
 # =========================================================================
+# Valida parâmetro view contra lista permitida (evita path traversal)
+_view_param = st.query_params.get("view", "")
+if _view_param and _view_param not in ALLOWED_VIEWS:
+    st.error("Página não encontrada.")
+    st.stop()
+
 if st.query_params.get("view") == "agendar":
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -238,8 +339,23 @@ elif st.query_params.get("view") == "cadastro":
                         if onb_g_senha != onb_g_senha2:
                             st.error("As senhas não coincidem.")
                         else:
-                            st.session_state.onb_dados_gestor = {"nome": onb_g_nome, "email": onb_g_email.strip().lower(), "senha": onb_g_senha}
-                            st.session_state.onb_step = 3; st.rerun()
+                            email_onb = onb_g_email.strip().lower()
+                            if not is_valid_email(email_onb):
+                                st.error("Formato de e-mail inválido.")
+                            elif len(onb_g_senha) < 8:
+                                st.error("A senha deve ter pelo menos 8 caracteres.")
+                            else:
+                                # Verifica se email já existe
+                                try:
+                                    dup_email = supabase.rpc("buscar_usuario_login", {"p_email": email_onb}).execute()
+                                    if dup_email.data:
+                                        st.error("Este e-mail já está cadastrado.")
+                                    else:
+                                        st.session_state.onb_dados_gestor = {"nome": sanitize(onb_g_nome,100), "email": email_onb, "senha": onb_g_senha}
+                                        st.session_state.onb_step = 3; st.rerun()
+                                except:
+                                    st.session_state.onb_dados_gestor = {"nome": sanitize(onb_g_nome,100), "email": email_onb, "senha": onb_g_senha}
+                                    st.session_state.onb_step = 3; st.rerun()
                     else:
                         st.warning("Preencha todos os campos obrigatórios.")
 
@@ -384,29 +500,48 @@ else:
                 st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
                 submit = st.form_submit_button("Entrar no painel →", type="primary", use_container_width=True)
                 if submit:
-                    email_limpo = email.strip().lower()
-                    usuario_valido = False
-                    u = None
-                    try:
-                        resp = supabase.rpc("buscar_usuario_login", {"p_email": email_limpo}).execute()
-                        if resp.data:
-                            u = resp.data[0]
-                            senha_hash = u.get("senha", "")
-                            if senha_hash.startswith("$2b$") or senha_hash.startswith("$2a$"):
-                                usuario_valido = bcrypt.checkpw(senha.encode("utf-8"), senha_hash.encode("utf-8"))
-                            else:
-                                usuario_valido = (senha == senha_hash)
-                    except Exception as e:
-                        st.error(f"Erro ao autenticar: {e}")
-                    if usuario_valido and u:
-                        st.session_state.autenticado  = True
-                        st.session_state.clinica_id   = u["clinica_id"]
-                        st.session_state.usuario_nome = u["nome"]
-                        st.session_state.perfil = "Gestor" if email_limpo == "teste@alfa.com" else str(u.get("perfil", "Recepcao")).strip().capitalize()
-                        st.rerun()
+                    email_limpo = sanitize(email, 200).lower()
+
+                    # Valida formato do email
+                    if not is_valid_email(email_limpo):
+                        st.error("Formato de e-mail inválido.")
                     else:
-                        if not usuario_valido:
-                            st.error("E-mail ou senha incorretos.")
+                        # Verifica rate limit
+                        bloqueado, segundos = check_rate_limit(email_limpo)
+                        if bloqueado:
+                            minutos = segundos // 60
+                            st.error(f"🔒 Muitas tentativas. Tente novamente em {minutos}min {segundos%60}s.")
+                        else:
+                            usuario_valido = False
+                            u = None
+                            try:
+                                resp = supabase.rpc("buscar_usuario_login", {"p_email": email_limpo}).execute()
+                                if resp.data:
+                                    u = resp.data[0]
+                                    senha_hash = u.get("senha", "")
+                                    if senha_hash.startswith("$2b$") or senha_hash.startswith("$2a$"):
+                                        usuario_valido = bcrypt.checkpw(senha.encode("utf-8"), senha_hash.encode("utf-8"))
+                                    else:
+                                        usuario_valido = (senha == senha_hash)
+                            except Exception as e:
+                                logger.error(f"Erro login RPC: {type(e).__name__}")
+                                st.error("Erro ao autenticar. Tente novamente.")
+                            if usuario_valido and u:
+                                reset_attempts(email_limpo)
+                                st.session_state.autenticado    = True
+                                st.session_state.clinica_id     = u["clinica_id"]
+                                st.session_state.usuario_nome   = u["nome"]
+                                st.session_state.last_activity  = datetime.now()
+                                st.session_state.perfil = "Gestor" if email_limpo == "teste@alfa.com" else str(u.get("perfil", "Recepcao")).strip().capitalize()
+                                st.rerun()
+                            else:
+                                register_failed_attempt(email_limpo)
+                                tentativas = st.session_state.get(f"attempts_{email_limpo}", 0)
+                                restantes  = MAX_LOGIN_ATTEMPTS - tentativas
+                                if restantes > 0:
+                                    st.error(f"E-mail ou senha incorretos. {restantes} tentativa(s) restante(s).")
+                                else:
+                                    st.error(f"🔒 Conta bloqueada por {LOCKOUT_SECONDS//60} minutos.")
 
             st.markdown("""
             <div style="background:white;border-radius:0 0 20px 20px;padding:0.5rem 2.4rem 2rem 2.4rem;
@@ -428,6 +563,19 @@ else:
             """, unsafe_allow_html=True)
 
     else:
+        # Verifica timeout de sessão
+        if check_session_timeout():
+            for k in ["autenticado","clinica_id","usuario_nome","perfil","last_activity"]:
+                st.session_state[k] = False if k == "autenticado" else None if k in ["clinica_id","last_activity"] else ""
+            st.warning("⏰ Sessão expirada por inatividade. Faça login novamente.")
+            st.rerun()
+
+        # Valida clinica_id na sessão (evita manipulação)
+        if not st.session_state.get("clinica_id"):
+            st.error("Sessão inválida.")
+            st.session_state.autenticado = False
+            st.rerun()
+
         with st.sidebar:
             st.markdown(f"""
             <div style="padding:0.5rem 0 1rem;">
