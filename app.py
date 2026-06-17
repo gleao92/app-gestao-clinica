@@ -228,6 +228,26 @@ if st.query_params.get("view") == "agendar":
             <p style="color:#64748b;margin-top:0.5rem;">Entre na lista de prioridades e seja avisado quando houver vaga.</p>
         </div>
         """, unsafe_allow_html=True)
+        if st.query_params.get("view") == "agendar":
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+
+    with col2:
+
+        st.markdown("""
+
+        <div style="text-align:center;margin-bottom:2rem;margin-top:2rem;">
+
+            <div style="font-size:3rem;margin-bottom:0.5rem;">🏥</div>
+
+            <h1 style="color:#1e3a8a;font-family:'DM Sans',sans-serif;font-weight:700;font-size:2rem;margin:0;">Portal de Agendamento</h1>
+
+            <p style="color:#64748b;margin-top:0.5rem;">Entre na lista de prioridades e seja avisado quando houver vaga.</p>
+
+        </div>
+
+        """, unsafe_allow_html=True)
+
         id_clinica = "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
         with st.form("form_publico"):
             nome = st.text_input("👤 Nome completo")
