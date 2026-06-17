@@ -248,21 +248,44 @@ if st.query_params.get("view") == "agendar":
 
         """, unsafe_allow_html=True)
 
-        id_clinica = "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
-        with st.form("form_publico"):
-            nome = st.text_input("👤 Nome completo")
-            tel  = st.text_input("📱 WhatsApp com DDD", placeholder="Ex: 62999990000")
-            st.markdown("<br>", unsafe_allow_html=True)
-            ok = st.form_submit_button("✅ Quero entrar na fila", type="primary", use_container_width=True)
-            if ok:
-                if nome and tel:
-                    fila = supabase.table("fila_espera").select("posicao").eq("clinica_id", id_clinica).order("posicao", desc=True).limit(1).execute()
-                    pos = 1 if not fila.data else fila.data[0]["posicao"] + 1
-                    supabase.table("fila_espera").insert({"clinica_id": id_clinica, "paciente_nome": nome, "telefone": tel, "posicao": pos}).execute()
-                    st.balloons()
-                    st.success(f"🎉 Pronto, {nome}! Você é o #{pos} na fila.")
-                else:
-                    st.warning("Preencha nome e telefone.")
+        if st.query_params.get("view") == "agendar":
+
+    # Pega o ID da clínica pela URL (?clinica=XXX)
+    id_clinica = st.query_params.get("clinica", "")
+
+    # Valida se a clínica existe
+    if not id_clinica:
+        st.error("❌ Link de agendamento inválido. Solicite o link correto à clínica.")
+        st.stop()
+
+    try:
+        clinica_info = supabase.table("clinicas").select("nome").eq("id", id_clinica).execute()
+        if not clinica_info.data:
+            st.error("❌ Clínica não encontrada. Verifique o link.")
+            st.stop()
+        nome_clinica = clinica_info.data[0].get("nome", "Clínica")
+    except Exception as e:
+        logger.error(f"Erro ao buscar clínica: {type(e).__name__}")
+        st.error("❌ Erro ao validar clínica. Tente novamente.")
+        st.stop()
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+
+    with col2:
+
+        st.markdown(f"""
+
+        <div style="text-align:center;margin-bottom:2rem;margin-top:2rem;">
+
+            <div style="font-size:3rem;margin-bottom:0.5rem;">🏥</div>
+
+            <h1 style="color:#1e3a8a;font-family:'DM Sans',sans-serif;font-weight:700;font-size:2rem;margin:0;">{nome_clinica}</h1>
+
+            <p style="color:#64748b;margin-top:0.5rem;">Entre na lista de prioridades e seja avisado quando houver vaga.</p>
+
+        </div>
+
+        """, unsafe_allow_html=True)
 
 # =========================================================================
 # CONFIRMAÇÃO DE CONSULTA
