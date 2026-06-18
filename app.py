@@ -248,6 +248,29 @@ if st.query_params.get("view") == "agendar":
         </div>
         """, unsafe_allow_html=True)
 
+        with st.form("form_publico"):
+            nome = st.text_input("👤 Nome completo")
+            tel = st.text_input("📱 WhatsApp com DDD", placeholder="Ex: 62999990000")
+            st.markdown("<br>", unsafe_allow_html=True)
+            ok = st.form_submit_button("✅ Quero entrar na fila", type="primary", use_container_width=True)
+            if ok:
+                if nome and tel:
+                    nome_seguro = sanitize(nome, 100)
+                    if not is_valid_phone(tel):
+                        st.warning("Telefone inválido. Use DDD + número.")
+                    else:
+                        try:
+                            fila = supabase.table("fila_espera").select("posicao").eq("clinica_id", id_clinica).order("posicao", desc=True).limit(1).execute()
+                            pos = 1 if not fila.data else fila.data[0]["posicao"] + 1
+                            supabase.table("fila_espera").insert({"clinica_id": id_clinica, "paciente_nome": nome_seguro, "telefone": tel, "posicao": pos}).execute()
+                            st.balloons()
+                            st.success(f"🎉 Pronto, {nome_seguro}! Você é o #{pos} na fila.")
+                        except Exception as e:
+                            logger.error(f"Erro ao inserir na fila: {type(e).__name__}")
+                            st.error("Erro ao registrar. Tente novamente.")
+                else:
+                    st.warning("Preencha nome e telefone.")
+
 # =========================================================================
 # CONFIRMAÇÃO DE CONSULTA
 # =========================================================================
