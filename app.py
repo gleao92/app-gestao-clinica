@@ -549,7 +549,10 @@ else:
                                     if senha_hash.startswith("$2b$") or senha_hash.startswith("$2a$"):
                                         usuario_valido = bcrypt.checkpw(senha.encode("utf-8"), senha_hash.encode("utf-8"))
                                     else:
-                                        usuario_valido = (senha == senha_hash)
+                                        # Senha sem hash bcrypt no banco: nunca aceitar em texto puro.
+                                        # Isso indica um registro cadastrado fora do fluxo normal do app.
+                                        logger.warning(f"Login bloqueado: usuário {email_limpo} sem hash bcrypt válido no banco.")
+                                        usuario_valido = False
                             except Exception as e:
                                 logger.error(f"Erro login RPC: {type(e).__name__}")
                                 st.error("Erro ao autenticar. Tente novamente.")
@@ -559,7 +562,7 @@ else:
                                 st.session_state.clinica_id     = u["clinica_id"]
                                 st.session_state.usuario_nome   = u["nome"]
                                 st.session_state.last_activity  = datetime.now()
-                                st.session_state.perfil = "Gestor" if email_limpo == "teste@alfa.com" else str(u.get("perfil", "Recepcao")).strip().capitalize()
+                                st.session_state.perfil = str(u.get("perfil", "Recepcao")).strip().capitalize()
                                 st.rerun()
                             else:
                                 register_failed_attempt(email_limpo)
@@ -856,12 +859,19 @@ else:
                 col_rec, col_fila_col = st.columns([1,1])
                 with col_rec:
                     if not agenda_df.empty:
-                        paciente_cancelar = st.selectbox("Registrar cancelamento de:", agenda_df["paciente_nome"])
+                        # Mostra nome + horário e usa o ID como valor real (evita ambiguidade entre pacientes com o mesmo nome)
+                        opcoes_cancelar = {
+                            f"{row['paciente_nome']} — {row['horario']}": row["id"]
+                            for _, row in agenda_df.iterrows()
+                        }
+                        label_cancelar = st.selectbox("Registrar cancelamento de:", list(opcoes_cancelar.keys()))
+                        id_cancelar = opcoes_cancelar[label_cancelar]
                         if st.button("⚡ Substituir automaticamente", type="primary", use_container_width=True):
                             if fila:
                                 sub = fila[0]
-                                horario = agenda_df.loc[agenda_df["paciente_nome"]==paciente_cancelar,"horario"].values[0]
-                                supabase.table("agenda").delete().eq("paciente_nome",paciente_cancelar).eq("clinica_id",cid).execute()
+                                linha_cancelada = agenda_df.loc[agenda_df["id"] == id_cancelar].iloc[0]
+                                horario = linha_cancelada["horario"]
+                                supabase.table("agenda").delete().eq("id", id_cancelar).eq("clinica_id", cid).execute()
                                 supabase.table("agenda").insert({"clinica_id":cid,"horario":horario,"paciente_nome":sub["paciente_nome"],"status":"Confirmado","telefone":sub.get("telefone","")}).execute()
                                 supabase.table("fila_espera").delete().eq("id",sub["id"]).execute()
                                 try:
