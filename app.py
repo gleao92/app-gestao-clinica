@@ -5,7 +5,6 @@ import urllib.parse
 import time
 import requests
 import os
-import bcrypt
 import re
 import html
 import logging
@@ -169,6 +168,63 @@ except Exception as e:
     st.error("❌ Não foi possível conectar ao banco de dados. Tente novamente em instantes.")
     logger.error(f"Erro de conexão Supabase: {e}")
     st.stop()
+
+def get_supabase_admin():
+    """
+    Client com a service_role key, usado APENAS para operações administrativas
+    que exigem privilégio elevado (ex: criar usuários em auth.users).
+
+    ATENÇÃO: a service_role key ignora completamente o RLS. Só deve ser usada
+    em pontos muito específicos e nunca para servir dados ao usuário final.
+    Retorna None se a chave não estiver configurada (o app segue funcionando,
+    só a criação de novos usuários fica indisponível).
+    """
+    url = os.environ.get("SUPABASE_URL") or st.secrets.get("SUPABASE_URL", "")
+    service_key = os.environ.get("SUPABASE_SERVICE_KEY") or st.secrets.get("SUPABASE_SERVICE_KEY", "")
+    if not url or not service_key:
+        return None
+    try:
+        return create_client(url, service_key)
+    except Exception as e:
+        logger.error(f"Erro ao criar client admin: {type(e).__name__}")
+        return None
+
+def get_supabase_autenticado() -> Client:
+    """
+    Retorna um client Supabase com a sessão do usuário logado aplicada.
+
+    IMPORTANTE: o client `supabase` global é cacheado com @st.cache_resource e
+    é compartilhado entre TODOS os usuários do app (é um recurso do processo,
+    não da sessão). Por isso, nunca chamamos set_session() nele — isso faria
+    a sessão de um usuário "vazar" para outro. Em vez disso, criamos um client
+    próprio por sessão, guardado em st.session_state, e restauramos o token
+    JWT nele a cada rerun do Streamlit.
+    """
+    url = os.environ.get("SUPABASE_URL") or st.secrets.get("SUPABASE_URL", "")
+    key = os.environ.get("SUPABASE_KEY") or st.secrets.get("SUPABASE_KEY", "")
+
+    if "_sb_client_sessao" not in st.session_state:
+        st.session_state._sb_client_sessao = create_client(url, key)
+
+    sess = st.session_state.get("sb_session")
+    if sess:
+        try:
+            st.session_state._sb_client_sessao.auth.set_session(
+                sess["access_token"], sess["refresh_token"]
+            )
+        except Exception as e:
+            # Token expirado/inválido e sem refresh possível: força novo login
+            # em vez de seguir com um client sem JWT (que cairia nas regras
+            # de RLS como usuário anônimo, sem acesso a nada).
+            logger.warning(f"Sessão Supabase inválida, forçando novo login: {type(e).__name__}")
+            for k in ["autenticado", "clinica_id", "usuario_nome", "perfil", "sb_session", "_sb_client_sessao"]:
+                if k in st.session_state:
+                    del st.session_state[k]
+            st.session_state.autenticado = False
+            st.warning("⏰ Sua sessão expirou. Faça login novamente.")
+            st.rerun()
+
+    return st.session_state._sb_client_sessao
 
 def disparar_whatsapp(nome: str, telefone: str, mensagem: str):
     """Dispara WhatsApp com validações de segurança."""
@@ -372,15 +428,16 @@ elif st.query_params.get("view") == "cadastro":
                             elif len(onb_g_senha) < 8:
                                 st.error("A senha deve ter pelo menos 8 caracteres.")
                             else:
-                                # Verifica se email já existe
+                                # Verifica se email já existe na tabela de usuários
                                 try:
-                                    dup_email = supabase.rpc("buscar_usuario_login", {"p_email": email_onb}).execute()
-                                    if dup_email.data:
-                                        st.error("Este e-mail já está cadastrado.")
-                                    else:
-                                        st.session_state.onb_dados_gestor = {"nome": sanitize(onb_g_nome,100), "email": email_onb, "senha": onb_g_senha}
-                                        st.session_state.onb_step = 3; st.rerun()
-                                except:
+                                    dup_email = supabase.table("usuarios").select("email").eq("email", email_onb).execute()
+                                    ja_existe = bool(dup_email.data)
+                                except Exception as e:
+                                    logger.error(f"Erro ao verificar e-mail duplicado: {type(e).__name__}")
+                                    ja_existe = False
+                                if ja_existe:
+                                    st.error("Este e-mail já está cadastrado.")
+                                else:
                                     st.session_state.onb_dados_gestor = {"nome": sanitize(onb_g_nome,100), "email": email_onb, "senha": onb_g_senha}
                                     st.session_state.onb_step = 3; st.rerun()
                     else:
@@ -409,18 +466,49 @@ elif st.query_params.get("view") == "cadastro":
                     st.session_state.onb_step = 2; st.rerun()
             with col_criar:
                 if st.button("🚀 Criar minha conta", type="primary", use_container_width=True):
-                    try:
-                        import uuid
-                        novo_clinica_id = str(uuid.uuid4())
-                        senha_hash = bcrypt.hashpw(dados_g["senha"].encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-                        supabase.table("usuarios").insert({"clinica_id": novo_clinica_id, "nome": dados_g["nome"], "email": dados_g["email"], "senha": senha_hash, "perfil": "Gestor"}).execute()
-                        for k in ["onb_step","onb_dados_clinica","onb_dados_gestor"]:
-                            if k in st.session_state: del st.session_state[k]
-                        st.balloons()
-                        st.success(f"🎉 Conta criada! Faça login com {dados_g['email']}.")
-                        st.markdown('<a href="/" style="color:#1d4ed8;font-weight:500;">← Ir para o login</a>', unsafe_allow_html=True)
-                    except Exception as e:
-                        st.error(f"Erro ao criar conta: {e}")
+                    admin = get_supabase_admin()
+                    if admin is None:
+                        st.error("Cadastro indisponível no momento: configuração administrativa ausente. Contate o suporte.")
+                    else:
+                        try:
+                            import uuid
+                            novo_clinica_id = str(uuid.uuid4())
+                            email_gestor = dados_g["email"]
+
+                            # 1) Cria a conta de login no Supabase Auth
+                            admin.auth.admin.create_user({
+                                "email": email_gestor,
+                                "password": dados_g["senha"],
+                                "email_confirm": True,
+                                "user_metadata": {"nome": dados_g["nome"], "clinica_id": novo_clinica_id, "perfil": "Gestor"},
+                            })
+
+                            # 2) Cria a clínica (com todos os dados coletados)
+                            admin.table("clinicas").insert({
+                                "id": novo_clinica_id,
+                                "nome_empresa": dados_c.get("nome", ""),
+                                "cnpj": dados_c.get("cnpj", ""),
+                                "telefone": dados_c.get("telefone", ""),
+                                "endereco": dados_c.get("endereco", ""),
+                                "especialidade": dados_c.get("especialidade", ""),
+                            }).execute()
+
+                            # 3) Cria o registro do gestor na tabela usuarios
+                            admin.table("usuarios").insert({
+                                "clinica_id": novo_clinica_id,
+                                "nome": dados_g["nome"],
+                                "email": email_gestor,
+                                "perfil": "Gestor",
+                            }).execute()
+
+                            for k in ["onb_step","onb_dados_clinica","onb_dados_gestor"]:
+                                if k in st.session_state: del st.session_state[k]
+                            st.balloons()
+                            st.success(f"🎉 Conta criada! Faça login com {email_gestor}.")
+                            st.markdown('<a href="/" style="color:#1d4ed8;font-weight:500;">← Ir para o login</a>', unsafe_allow_html=True)
+                        except Exception as e:
+                            logger.error(f"Erro ao criar conta (onboarding): {type(e).__name__}")
+                            st.error(f"Erro ao criar conta: {e}")
 
 # =========================================================================
 # SISTEMA INTERNO
@@ -541,28 +629,39 @@ else:
                         else:
                             usuario_valido = False
                             u = None
+                            sessao_auth = None
                             try:
-                                resp = supabase.rpc("buscar_usuario_login", {"p_email": email_limpo}).execute()
-                                if resp.data:
-                                    u = resp.data[0]
-                                    senha_hash = u.get("senha", "")
-                                    if senha_hash.startswith("$2b$") or senha_hash.startswith("$2a$"):
-                                        usuario_valido = bcrypt.checkpw(senha.encode("utf-8"), senha_hash.encode("utf-8"))
-                                    else:
-                                        # Senha sem hash bcrypt no banco: nunca aceitar em texto puro.
-                                        # Isso indica um registro cadastrado fora do fluxo normal do app.
-                                        logger.warning(f"Login bloqueado: usuário {email_limpo} sem hash bcrypt válido no banco.")
-                                        usuario_valido = False
+                                # Autentica via Supabase Auth nativo (gera JWT real, necessário para o RLS funcionar)
+                                client_login = create_client(
+                                    os.environ.get("SUPABASE_URL") or st.secrets.get("SUPABASE_URL", ""),
+                                    os.environ.get("SUPABASE_KEY") or st.secrets.get("SUPABASE_KEY", ""),
+                                )
+                                auth_resp = client_login.auth.sign_in_with_password({
+                                    "email": email_limpo, "password": senha
+                                })
+                                if auth_resp.session and auth_resp.user:
+                                    sessao_auth = auth_resp.session
+                                    # Busca os dados próprios do usuário (clinica_id, perfil, nome) na tabela usuarios.
+                                    # Agora a leitura já passa pelo RLS com o JWT real desta sessão.
+                                    client_login.auth.set_session(sessao_auth.access_token, sessao_auth.refresh_token)
+                                    perfil_resp = client_login.table("usuarios").select("*").eq("email", email_limpo).execute()
+                                    if perfil_resp.data:
+                                        u = perfil_resp.data[0]
+                                        usuario_valido = True
                             except Exception as e:
-                                logger.error(f"Erro login RPC: {type(e).__name__}")
-                                st.error("Erro ao autenticar. Tente novamente.")
-                            if usuario_valido and u:
+                                logger.warning(f"Login falhou para {email_limpo}: {type(e).__name__}")
+                                usuario_valido = False
+                            if usuario_valido and u and sessao_auth:
                                 reset_attempts(email_limpo)
                                 st.session_state.autenticado    = True
                                 st.session_state.clinica_id     = u["clinica_id"]
                                 st.session_state.usuario_nome   = u["nome"]
                                 st.session_state.last_activity  = datetime.now()
                                 st.session_state.perfil = str(u.get("perfil", "Recepcao")).strip().capitalize()
+                                st.session_state.sb_session = {
+                                    "access_token": sessao_auth.access_token,
+                                    "refresh_token": sessao_auth.refresh_token,
+                                }
                                 st.rerun()
                             else:
                                 register_failed_attempt(email_limpo)
@@ -595,14 +694,19 @@ else:
     else:
         # Verifica timeout de sessão
         if check_session_timeout():
-            for k in ["autenticado","clinica_id","usuario_nome","perfil","last_activity"]:
-                st.session_state[k] = False if k == "autenticado" else None if k in ["clinica_id","last_activity"] else ""
+            for k in ["autenticado","clinica_id","usuario_nome","perfil","last_activity","sb_session","_sb_client_sessao"]:
+                if k in st.session_state:
+                    del st.session_state[k]
+            st.session_state.autenticado = False
             st.warning("⏰ Sessão expirada por inatividade. Faça login novamente.")
             st.rerun()
 
-        # Valida clinica_id na sessão (evita manipulação)
-        if not st.session_state.get("clinica_id"):
-            st.error("Sessão inválida.")
+        # Valida clinica_id e sessão do Supabase Auth (evita manipulação e JWT ausente)
+        if not st.session_state.get("clinica_id") or not st.session_state.get("sb_session"):
+            st.error("Sessão inválida. Faça login novamente.")
+            for k in ["autenticado","clinica_id","usuario_nome","perfil","sb_session","_sb_client_sessao"]:
+                if k in st.session_state:
+                    del st.session_state[k]
             st.session_state.autenticado = False
             st.rerun()
 
@@ -623,11 +727,17 @@ else:
             st.markdown("<div style='font-size:0.7rem;color:#475569;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.5rem;'>Menu</div>", unsafe_allow_html=True)
             menu = st.radio("", opcoes, label_visibility="collapsed")
             if st.button("Sair", use_container_width=True):
-                for k in ["autenticado","clinica_id","usuario_nome","perfil"]:
-                    st.session_state[k] = False if k == "autenticado" else ""
+                try:
+                    get_supabase_autenticado().auth.sign_out()
+                except Exception:
+                    pass
+                for k in ["autenticado","clinica_id","usuario_nome","perfil","sb_session","_sb_client_sessao"]:
+                    if k in st.session_state:
+                        del st.session_state[k]
                 st.rerun()
 
         cid = st.session_state.clinica_id
+        db = get_supabase_autenticado()  # client com o JWT do usuário logado — usar daqui em diante, não 'supabase'
 
         # ── DASHBOARD ──────────────────────────────────────────────
         if menu == "📊 Dashboard":
@@ -647,10 +757,10 @@ else:
             # KPIs com dados reais + skeleton loading
             with st.spinner("Carregando métricas..."):
                 try:
-                    ag_resp  = supabase.table("agenda").select("*").eq("clinica_id", cid).execute()
+                    ag_resp  = db.table("agenda").select("*").eq("clinica_id", cid).execute()
                     ag_data  = ag_resp.data or []
-                    fila_kpi = supabase.table("fila_espera").select("*").eq("clinica_id", cid).execute()
-                    hist_kpi = supabase.table("historico_consultas").select("*").eq("clinica_id", cid).execute()
+                    fila_kpi = db.table("fila_espera").select("*").eq("clinica_id", cid).execute()
+                    hist_kpi = db.table("historico_consultas").select("*").eq("clinica_id", cid).execute()
 
                     total_ag   = len(ag_data)
                     confirmados = len([a for a in ag_data if a.get("status") == "Confirmado"])
@@ -675,14 +785,14 @@ else:
             st.markdown("<br>", unsafe_allow_html=True)
             alertas = []
             try:
-                inv_alerta = supabase.table("inventario").select("*").eq("clinica_id", cid).execute()
+                inv_alerta = db.table("inventario").select("*").eq("clinica_id", cid).execute()
                 for item in (inv_alerta.data or []):
                     if item.get("quantidade",99) <= item.get("minimo",5):
                         alertas.append(("🔴", f"Estoque baixo: **{item['nome']}** ({item['quantidade']} unidades)"))
             except: pass
             try:
                 from datetime import date
-                eq_alerta = supabase.table("equipamentos").select("*").eq("clinica_id", cid).execute()
+                eq_alerta = db.table("equipamentos").select("*").eq("clinica_id", cid).execute()
                 for eq in (eq_alerta.data or []):
                     if eq.get("proxima_manutencao"):
                         delta_eq = (datetime.strptime(eq["proxima_manutencao"],"%Y-%m-%d").date()-date.today()).days
@@ -721,7 +831,7 @@ else:
             with col_g2:
                 st.markdown("#### 👥 Fila de espera")
                 try:
-                    fila_dash = supabase.table("fila_espera").select("*").eq("clinica_id", cid).order("posicao").limit(5).execute()
+                    fila_dash = db.table("fila_espera").select("*").eq("clinica_id", cid).order("posicao").limit(5).execute()
                     if fila_dash.data:
                         for p in fila_dash.data:
                             st.markdown(f"""<div style="background:white;border:1px solid #e2e8f0;border-radius:10px;
@@ -737,9 +847,9 @@ else:
         elif menu == "📅 Agenda":
             # Skeleton loading
             with st.spinner("Carregando agenda..."):
-                agenda_resp = supabase.table("agenda").select("*").eq("clinica_id", cid).execute()
+                agenda_resp = db.table("agenda").select("*").eq("clinica_id", cid).execute()
                 agenda_df   = pd.DataFrame(agenda_resp.data) if agenda_resp.data else pd.DataFrame()
-                fila_resp   = supabase.table("fila_espera").select("*").eq("clinica_id", cid).order("posicao").execute()
+                fila_resp   = db.table("fila_espera").select("*").eq("clinica_id", cid).order("posicao").execute()
                 fila        = fila_resp.data or []
 
             # Abas: Grade | Lista | Adicionar
@@ -837,7 +947,7 @@ else:
                     if np_ok:
                         if np_nome and np_tel and horarios_livres:
                             try:
-                                supabase.table("agenda").insert({
+                                db.table("agenda").insert({
                                     "clinica_id": cid,
                                     "paciente_nome": np_nome,
                                     "telefone": np_tel,
@@ -871,11 +981,11 @@ else:
                                 sub = fila[0]
                                 linha_cancelada = agenda_df.loc[agenda_df["id"] == id_cancelar].iloc[0]
                                 horario = linha_cancelada["horario"]
-                                supabase.table("agenda").delete().eq("id", id_cancelar).eq("clinica_id", cid).execute()
-                                supabase.table("agenda").insert({"clinica_id":cid,"horario":horario,"paciente_nome":sub["paciente_nome"],"status":"Confirmado","telefone":sub.get("telefone","")}).execute()
-                                supabase.table("fila_espera").delete().eq("id",sub["id"]).execute()
+                                db.table("agenda").delete().eq("id", id_cancelar).eq("clinica_id", cid).execute()
+                                db.table("agenda").insert({"clinica_id":cid,"horario":horario,"paciente_nome":sub["paciente_nome"],"status":"Confirmado","telefone":sub.get("telefone","")}).execute()
+                                db.table("fila_espera").delete().eq("id",sub["id"]).execute()
                                 try:
-                                    supabase.table("historico_consultas").insert({"clinica_id":cid,"paciente_nome":sub["paciente_nome"],"telefone":sub["telefone"],"horario":horario,"data":datetime.now().strftime("%Y-%m-%d"),"origem":"Encaixe via fila"}).execute()
+                                    db.table("historico_consultas").insert({"clinica_id":cid,"paciente_nome":sub["paciente_nome"],"telefone":sub["telefone"],"horario":horario,"data":datetime.now().strftime("%Y-%m-%d"),"origem":"Encaixe via fila"}).execute()
                                 except: pass
                                 disparar_whatsapp(sub["paciente_nome"], sub["telefone"], f"Olá {sub['paciente_nome']}! Um horário vagou às {horario}. Você foi encaixado!")
                                 st.success(f"✅ {sub['paciente_nome']} encaixado às {horario}!")
@@ -936,7 +1046,7 @@ else:
         elif menu == "👤 Pacientes":
             st.markdown("### 👤 Histórico de Pacientes")
             try:
-                hist = supabase.table("historico_consultas").select("*").eq("clinica_id", cid).order("data", desc=True).execute()
+                hist = db.table("historico_consultas").select("*").eq("clinica_id", cid).order("data", desc=True).execute()
                 if hist.data:
                     df_hist = pd.DataFrame(hist.data)
                     busca = st.text_input("🔍 Buscar paciente pelo nome")
@@ -957,7 +1067,7 @@ else:
         # ── RELATÓRIOS ─────────────────────────────────────────────
         elif menu == "📋 Relatórios":
             st.markdown("### 📋 Relatório de Cancelamentos")
-            agenda_resp = supabase.table("agenda").select("*").eq("clinica_id", cid).execute()
+            agenda_resp = db.table("agenda").select("*").eq("clinica_id", cid).execute()
             df_rel = pd.DataFrame(agenda_resp.data)
             if not df_rel.empty:
                 col_r1,col_r2,col_r3 = st.columns(3)
@@ -983,7 +1093,7 @@ else:
         # ── DOCUMENTOS ─────────────────────────────────────────────
         elif menu == "📄 Documentos":
             st.markdown("### 📄 Emissão de Documentos Médicos")
-            agenda_resp = supabase.table("agenda").select("*").eq("clinica_id", cid).execute()
+            agenda_resp = db.table("agenda").select("*").eq("clinica_id", cid).execute()
             pacientes_agenda = ["— selecione —"] + ([r["paciente_nome"] for r in agenda_resp.data] if agenda_resp.data else [])
             doc_tabs = st.tabs(["💊 Receita Simples","📋 Atestado Médico","🕐 Declaração","🔀 Encaminhamento","⚠️ Receita Controlada"])
             with st.expander("👨‍⚕️ Dados do médico (preencha uma vez)", expanded=False):
@@ -1110,14 +1220,14 @@ else:
                 if st.button("✅ Registrar checklist", type="primary"):
                     if responsavel_check:
                         try:
-                            supabase.table("checklist_diario").insert({"clinica_id":cid,"tipo":tipo_check.lower(),"responsavel":responsavel_check,"itens":[{"item":k,"ok":v} for k,v in checks.items()],"concluido":all(checks.values()),"data":datetime.now().strftime("%Y-%m-%d")}).execute()
+                            db.table("checklist_diario").insert({"clinica_id":cid,"tipo":tipo_check.lower(),"responsavel":responsavel_check,"itens":[{"item":k,"ok":v} for k,v in checks.items()],"concluido":all(checks.values()),"data":datetime.now().strftime("%Y-%m-%d")}).execute()
                             st.success("✅ Checklist registrado!" if all(checks.values()) else f"⚠️ Registrado com pendências.")
                         except Exception as e: st.error(f"Erro: {e}")
                     else: st.warning("Informe o responsável.")
                 st.divider()
                 st.markdown("**Histórico recente:**")
                 try:
-                    hist_check = supabase.table("checklist_diario").select("*").eq("clinica_id",cid).order("created_at",desc=True).limit(10).execute()
+                    hist_check = db.table("checklist_diario").select("*").eq("clinica_id",cid).order("created_at",desc=True).limit(10).execute()
                     for h in hist_check.data:
                         st.markdown(f"{'✅' if h['concluido'] else '⚠️'} **{h['data']}** — {h['tipo'].capitalize()} — {h['responsavel']}")
                 except: st.info("Crie a tabela checklist_diario no Supabase.")
@@ -1132,13 +1242,13 @@ else:
                         oc_resp   = st.text_input("Responsável")
                         if st.form_submit_button("📋 Registrar", type="primary", use_container_width=True) and oc_titulo:
                             try:
-                                supabase.table("ocorrencias").insert({"clinica_id":cid,"titulo":oc_titulo,"descricao":oc_desc,"responsavel":oc_resp,"status":"Aberta","data":datetime.now().strftime("%Y-%m-%d")}).execute()
+                                db.table("ocorrencias").insert({"clinica_id":cid,"titulo":oc_titulo,"descricao":oc_desc,"responsavel":oc_resp,"status":"Aberta","data":datetime.now().strftime("%Y-%m-%d")}).execute()
                                 st.success("✅ Ocorrência registrada!"); st.rerun()
                             except Exception as e: st.error(f"Erro: {e}")
                 with col_oc2:
                     st.markdown("**Ocorrências:**")
                     try:
-                        ocs = supabase.table("ocorrencias").select("*").eq("clinica_id",cid).order("data",desc=True).execute()
+                        ocs = db.table("ocorrencias").select("*").eq("clinica_id",cid).order("data",desc=True).execute()
                         if ocs.data:
                             for oc in ocs.data:
                                 cor = {"Aberta":"🔴","Em andamento":"🟡","Resolvida":"🟢"}.get(oc["status"],"🔴")
@@ -1146,7 +1256,7 @@ else:
                                     st.write(oc.get("descricao",""))
                                     novo_status = st.selectbox("Status:", ["Aberta","Em andamento","Resolvida"], index=["Aberta","Em andamento","Resolvida"].index(oc["status"]), key=f"oc_{oc['id']}")
                                     if st.button("Salvar", key=f"btn_oc_{oc['id']}"):
-                                        supabase.table("ocorrencias").update({"status":novo_status}).eq("id",oc["id"]).execute(); st.rerun()
+                                        db.table("ocorrencias").update({"status":novo_status}).eq("id",oc["id"]).execute(); st.rerun()
                         else: st.success("Nenhuma ocorrência. 🎉")
                     except: st.info("Crie a tabela ocorrencias no Supabase.")
 
@@ -1158,14 +1268,14 @@ else:
                         eq_nome = st.text_input("Nome"); eq_modelo = st.text_input("Modelo/Marca"); eq_prox = st.date_input("Próxima manutenção")
                         if st.form_submit_button("➕ Cadastrar", type="primary", use_container_width=True) and eq_nome:
                             try:
-                                supabase.table("equipamentos").insert({"clinica_id":cid,"nome":eq_nome,"modelo":eq_modelo,"proxima_manutencao":str(eq_prox),"status":"OK"}).execute()
+                                db.table("equipamentos").insert({"clinica_id":cid,"nome":eq_nome,"modelo":eq_modelo,"proxima_manutencao":str(eq_prox),"status":"OK"}).execute()
                                 st.success(f"✅ {eq_nome} cadastrado!"); st.rerun()
                             except Exception as e: st.error(f"Erro: {e}")
                 with col_eq2:
                     st.markdown("**Equipamentos:**")
                     try:
                         from datetime import date
-                        equips = supabase.table("equipamentos").select("*").eq("clinica_id",cid).order("proxima_manutencao").execute()
+                        equips = db.table("equipamentos").select("*").eq("clinica_id",cid).order("proxima_manutencao").execute()
                         for eq in equips.data:
                             prox = eq.get("proxima_manutencao","")
                             alerta = "🟢"
@@ -1184,14 +1294,14 @@ else:
                         inv_nome = st.text_input("Nome"); inv_qtd = st.number_input("Quantidade", min_value=0, value=10); inv_min = st.number_input("Mínimo", min_value=0, value=5); inv_val = st.date_input("Validade")
                         if st.form_submit_button("➕ Adicionar", type="primary", use_container_width=True) and inv_nome:
                             try:
-                                supabase.table("inventario").insert({"clinica_id":cid,"nome":inv_nome,"quantidade":int(inv_qtd),"minimo":int(inv_min),"validade":str(inv_val)}).execute()
+                                db.table("inventario").insert({"clinica_id":cid,"nome":inv_nome,"quantidade":int(inv_qtd),"minimo":int(inv_min),"validade":str(inv_val)}).execute()
                                 st.success(f"✅ {inv_nome} adicionado!"); st.rerun()
                             except Exception as e: st.error(f"Erro: {e}")
                 with col_inv2:
                     st.markdown("**Estoque:**")
                     try:
                         from datetime import date
-                        inv = supabase.table("inventario").select("*").eq("clinica_id",cid).execute()
+                        inv = db.table("inventario").select("*").eq("clinica_id",cid).execute()
                         if inv.data:
                             alertas_inv = [i for i in inv.data if i["quantidade"]<=i["minimo"]]
                             if alertas_inv: st.error(f"⚠️ {len(alertas_inv)} material(is) abaixo do mínimo!")
@@ -1217,14 +1327,14 @@ else:
                         lp_amb = st.text_input("Ambiente", placeholder="Ex: Sala de espera"); lp_resp = st.text_input("Responsável"); lp_freq = st.selectbox("Frequência:", ["Diária","Semanal","Mensal"])
                         if st.form_submit_button("➕ Cadastrar", type="primary", use_container_width=True) and lp_amb:
                             try:
-                                supabase.table("escala_limpeza").insert({"clinica_id":cid,"ambiente":lp_amb,"responsavel":lp_resp,"frequencia":lp_freq,"ultima_limpeza":datetime.now().strftime("%Y-%m-%d")}).execute()
+                                db.table("escala_limpeza").insert({"clinica_id":cid,"ambiente":lp_amb,"responsavel":lp_resp,"frequencia":lp_freq,"ultima_limpeza":datetime.now().strftime("%Y-%m-%d")}).execute()
                                 st.success(f"✅ {lp_amb} adicionado!"); st.rerun()
                             except Exception as e: st.error(f"Erro: {e}")
                 with col_lp2:
                     st.markdown("**Escala atual:**")
                     try:
                         from datetime import date
-                        limpeza = supabase.table("escala_limpeza").select("*").eq("clinica_id",cid).execute()
+                        limpeza = db.table("escala_limpeza").select("*").eq("clinica_id",cid).execute()
                         if limpeza.data:
                             for lp in limpeza.data:
                                 ultima = lp.get("ultima_limpeza",""); alerta = "🟢"
@@ -1237,7 +1347,7 @@ else:
                                 with st.expander(f"{alerta} {lp['ambiente']} — {lp.get('frequencia','')}"):
                                     st.write(f"Responsável: {lp.get('responsavel','')}"); st.write(f"Última limpeza: {ultima}")
                                     if st.button("✅ Registrar limpeza", key=f"lp_{lp['id']}"):
-                                        supabase.table("escala_limpeza").update({"ultima_limpeza":datetime.now().strftime("%Y-%m-%d")}).eq("id",lp["id"]).execute(); st.rerun()
+                                        db.table("escala_limpeza").update({"ultima_limpeza":datetime.now().strftime("%Y-%m-%d")}).eq("id",lp["id"]).execute(); st.rerun()
                         else: st.info("Nenhum ambiente cadastrado.")
                     except: st.info("Crie a tabela escala_limpeza no Supabase.")
 
@@ -1306,16 +1416,45 @@ else:
                 with st.form("novo_usuario"):
                     n_nome=st.text_input("Nome completo"); n_email=st.text_input("E-mail"); n_senha=st.text_input("Senha",type="password"); n_perf=st.selectbox("Perfil",["Recepcao","Gestor"])
                     if st.form_submit_button("Criar conta",type="primary",use_container_width=True):
-                        existe=supabase.table("usuarios").select("email").eq("email",n_email).execute()
-                        if existe.data: st.error("E-mail já cadastrado.")
-                        elif n_nome and n_senha:
-                            senha_hash=bcrypt.hashpw(n_senha.encode("utf-8"),bcrypt.gensalt()).decode("utf-8")
-                            supabase.table("usuarios").insert({"clinica_id":cid,"nome":n_nome,"email":n_email.strip().lower(),"senha":senha_hash,"perfil":n_perf}).execute()
-                            st.success(f"✅ Conta de {n_nome} criada!"); st.rerun()
-                        else: st.warning("Preencha todos os campos.")
+                        n_email_limpo = sanitize(n_email, 200).lower()
+                        if not (n_nome and n_senha and n_email_limpo):
+                            st.warning("Preencha todos os campos.")
+                        elif not is_valid_email(n_email_limpo):
+                            st.error("Formato de e-mail inválido.")
+                        elif len(n_senha) < 8:
+                            st.error("A senha deve ter pelo menos 8 caracteres.")
+                        else:
+                            existe=db.table("usuarios").select("email").eq("email",n_email_limpo).execute()
+                            if existe.data:
+                                st.error("E-mail já cadastrado.")
+                            else:
+                                admin = get_supabase_admin()
+                                if admin is None:
+                                    st.error("Criação de usuários indisponível: a chave administrativa (SUPABASE_SERVICE_KEY) não está configurada nos secrets do app.")
+                                else:
+                                    try:
+                                        # 1) Cria a conta no Supabase Auth (gera o login que funciona com o RLS)
+                                        admin.auth.admin.create_user({
+                                            "email": n_email_limpo,
+                                            "password": n_senha,
+                                            "email_confirm": True,
+                                            "user_metadata": {"nome": sanitize(n_nome,100), "clinica_id": cid, "perfil": n_perf},
+                                        })
+                                        # 2) Cria o registro na tabela própria (sem guardar senha em texto;
+                                        #    a senha agora vive só no Supabase Auth)
+                                        db.table("usuarios").insert({
+                                            "clinica_id": cid,
+                                            "nome": sanitize(n_nome,100),
+                                            "email": n_email_limpo,
+                                            "perfil": n_perf,
+                                        }).execute()
+                                        st.success(f"✅ Conta de {n_nome} criada!"); st.rerun()
+                                    except Exception as e:
+                                        logger.error(f"Erro ao criar usuário: {type(e).__name__}")
+                                        st.error(f"Erro ao criar conta: {e}")
             with col_lista:
                 st.markdown("**Equipe ativa**")
-                usuarios=supabase.table("usuarios").select("nome,email,perfil").eq("clinica_id",cid).execute()
+                usuarios=db.table("usuarios").select("nome,email,perfil").eq("clinica_id",cid).execute()
                 if usuarios.data:
                     df_u=pd.DataFrame(usuarios.data).rename(columns={"nome":"Nome","email":"E-mail","perfil":"Perfil"})
                     st.dataframe(df_u,hide_index=True,use_container_width=True)
