@@ -974,14 +974,27 @@ else:
             # ── ABA 3: ADICIONAR PACIENTE ─────────────────────────
             with aba_ag[2]:
                 st.markdown("#### ➕ Adicionar paciente na agenda")
+                # Data do agendamento — fora do form, para os horários livres
+                # recalcularem automaticamente quando o usuário muda o dia.
+                np_data = st.date_input("📅 Data da consulta*", value=data_sel, format="DD/MM/YYYY", key="np_data")
+                np_data_str = np_data.isoformat()
+
+                # Busca consultas já ocupadas NA DATA escolhida (que pode ser diferente
+                # da data do seletor do topo), para calcular os horários livres corretos.
+                if np_data == data_sel:
+                    ocupados_dia = set(agenda_map.keys())
+                else:
+                    _ocup_resp = db.table("agenda").select("horario").eq("clinica_id", cid).eq("data", np_data_str).execute()
+                    ocupados_dia = {str(r.get("horario",""))[:5] for r in (_ocup_resp.data or [])}
+
+                horarios_livres = [h for h in [f"{x:02d}:00" for x in range(7,20)] if h not in ocupados_dia]
+
                 with st.form("form_novo_paciente"):
                     col_np1, col_np2 = st.columns(2)
                     with col_np1:
                         np_nome = st.text_input("Nome do paciente*", placeholder="Ex: Maria Silva")
                         np_tel  = st.text_input("WhatsApp (com DDD)*", placeholder="Ex: 62999990000")
                     with col_np2:
-                        horarios_livres = [h for h in [f"{h:02d}:00" for h in range(7,20)]
-                                           if h not in agenda_map]
                         np_hora   = st.selectbox("Horário*", horarios_livres if horarios_livres else ["Sem horários livres"])
                         np_status = st.selectbox("Status inicial:", ["Pendente","Confirmado"])
                     np_ok = st.form_submit_button("✅ Adicionar à agenda", type="primary", use_container_width=True)
@@ -994,9 +1007,9 @@ else:
                                     "telefone": np_tel,
                                     "horario": np_hora,
                                     "status": np_status,
-                                    "data": data_str
+                                    "data": np_data_str
                                 }).execute()
-                                _quando = "hoje" if data_sel == _date.today() else f"em {data_sel.strftime('%d/%m/%Y')}"
+                                _quando = "hoje" if np_data == _date.today() else f"em {np_data.strftime('%d/%m/%Y')}"
                                 st.success(f"✅ {np_nome} adicionado às {np_hora} ({_quando})!")
                                 if np_status == "Confirmado":
                                     disparar_whatsapp(np_nome, np_tel, f"Olá {np_nome}! Sua consulta foi agendada para {_quando} às {np_hora}.")
