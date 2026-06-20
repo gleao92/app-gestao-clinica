@@ -15,6 +15,109 @@ from functools import wraps
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger("clinicflow")
 
+# ── Exportação de dados (Excel / PDF) ─────────────────────────────────
+def gerar_excel(df, nome_aba="Dados"):
+    """Recebe um DataFrame e retorna os bytes de um arquivo .xlsx."""
+    import io
+    buffer = io.BytesIO()
+    try:
+        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+            df.to_excel(writer, index=False, sheet_name=nome_aba[:31])
+        buffer.seek(0)
+        return buffer.getvalue()
+    except Exception as e:
+        logger.error(f"Erro ao gerar Excel: {type(e).__name__}")
+        return None
+
+def gerar_pdf(df, titulo="Relatório", subtitulo=""):
+    """Recebe um DataFrame e retorna os bytes de um PDF tabular simples."""
+    try:
+        from fpdf import FPDF
+    except Exception:
+        return None
+    try:
+        pdf = FPDF(orientation="L", unit="mm", format="A4")
+        pdf.add_page()
+        # Cabeçalho
+        pdf.set_font("Helvetica", "B", 16)
+        pdf.cell(0, 10, _txt_pdf(titulo), new_x="LMARGIN", new_y="NEXT")
+        if subtitulo:
+            pdf.set_font("Helvetica", "", 10)
+            pdf.set_text_color(100, 100, 100)
+            pdf.cell(0, 6, _txt_pdf(subtitulo), new_x="LMARGIN", new_y="NEXT")
+            pdf.set_text_color(0, 0, 0)
+        pdf.set_font("Helvetica", "", 8)
+        pdf.cell(0, 5, _txt_pdf(f"Gerado em {datetime.now().strftime('%d/%m/%Y %H:%M')}"), new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(3)
+
+        if df.empty:
+            pdf.set_font("Helvetica", "", 11)
+            pdf.cell(0, 10, "Sem dados para exibir.", new_x="LMARGIN", new_y="NEXT")
+            return bytes(pdf.output())
+
+        # Largura das colunas distribuída igualmente
+        cols = list(df.columns)
+        page_w = pdf.w - 2 * pdf.l_margin
+        col_w = page_w / len(cols)
+
+        # Cabeçalho da tabela
+        pdf.set_font("Helvetica", "B", 9)
+        pdf.set_fill_color(15, 23, 42)
+        pdf.set_text_color(255, 255, 255)
+        for c in cols:
+            pdf.cell(col_w, 8, _txt_pdf(str(c))[:28], border=1, fill=True, align="C")
+        pdf.ln()
+
+        # Linhas
+        pdf.set_font("Helvetica", "", 8)
+        pdf.set_text_color(0, 0, 0)
+        fill = False
+        for _, row in df.iterrows():
+            if fill:
+                pdf.set_fill_color(241, 245, 249)
+            else:
+                pdf.set_fill_color(255, 255, 255)
+            for c in cols:
+                val = "" if pd.isna(row[c]) else str(row[c])
+                pdf.cell(col_w, 7, _txt_pdf(val)[:30], border=1, fill=True, align="L")
+            pdf.ln()
+            fill = not fill
+
+        return bytes(pdf.output())
+    except Exception as e:
+        logger.error(f"Erro ao gerar PDF: {type(e).__name__}")
+        return None
+
+def _txt_pdf(texto):
+    """Converte texto para latin-1 (limitação do fpdf core), trocando o que não couber."""
+    try:
+        return str(texto).encode("latin-1", "replace").decode("latin-1")
+    except Exception:
+        return str(texto)
+
+def botoes_exportar(df, base_nome, titulo_pdf, subtitulo_pdf="", key_prefix=""):
+    """Renderiza dois botões lado a lado: baixar Excel e baixar PDF."""
+    if df is None or df.empty:
+        return
+    cE, cP = st.columns(2)
+    with cE:
+        xlsx = gerar_excel(df, nome_aba=base_nome)
+        if xlsx:
+            st.download_button("⬇️ Baixar Excel", data=xlsx,
+                file_name=f"{base_nome}_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True, key=f"{key_prefix}_xlsx")
+    with cP:
+        pdf_bytes = gerar_pdf(df, titulo=titulo_pdf, subtitulo=subtitulo_pdf)
+        if pdf_bytes:
+            st.download_button("⬇️ Baixar PDF", data=pdf_bytes,
+                file_name=f"{base_nome}_{datetime.now().strftime('%Y%m%d')}.pdf",
+                mime="application/pdf",
+                use_container_width=True, key=f"{key_prefix}_pdf")
+        else:
+            st.caption("PDF indisponível (lib não instalada).")
+
+
 # ── Constantes de segurança ───────────────────────────────────────────
 MAX_LOGIN_ATTEMPTS  = 5       # bloqueio após N tentativas falhas
 LOCKOUT_SECONDS     = 300     # 5 minutos de bloqueio
@@ -576,37 +679,6 @@ else:
         /* Fundo branco em toda a tela de login (este <style> só é renderizado
            na tela de login, então o painel interno mantém o fundo cinza). */
         .stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"] { background: white !important; }
-        /* Form de login sem fundo cinza próprio, fundindo com o card branco */
-        [data-testid="stForm"] { background: white !important; border:none !important; }
-        /* Força branco em QUALQUER input/caixa dentro da tela de login,
-           cobrindo todas as variações internas do Streamlit/BaseWeb. */
-        .stApp input,
-        .stApp .stTextInput > div,
-        .stApp .stTextInput > div > div,
-        .stApp div[data-baseweb="input"],
-        .stApp div[data-baseweb="input"] > div,
-        .stApp div[data-baseweb="base-input"] {
-            background-color: #ffffff !important;
-            background: #ffffff !important;
-        }
-        .stApp .stTextInput > div > div {
-            border: 1px solid #e2e8f0 !important;
-            border-radius: 10px !important;
-        }
-        /* Container raiz do input (visto no DevTools: stTextInputRootElement) */
-        .stApp [data-testid="stTextInputRootElement"],
-        .stApp [data-testid="stTextInputRootElement"] > div,
-        .stApp [data-baseweb="input"] {
-            background-color: #ffffff !important;
-        }
-        /* Labels (E-mail / Senha) e seus containers — remover faixa cinza */
-        .stApp [data-testid="stWidgetLabel"],
-        .stApp [data-testid="stWidgetLabel"] > div,
-        .stApp .stTextInput label,
-        .stApp .stTextInput > label {
-            background: transparent !important;
-            background-color: transparent !important;
-        }
         </style>
         """, unsafe_allow_html=True)
 
@@ -1147,6 +1219,11 @@ else:
                     labels = {"data":"Data","horario":"Horário","paciente_nome":"Paciente","telefone":"Telefone","origem":"Origem"}
                     df_show = df_hist[[c for c in cols_show if c in df_hist.columns]].rename(columns=labels)
                     st.dataframe(df_show, hide_index=True, use_container_width=True)
+                    st.markdown("##### 📤 Exportar")
+                    botoes_exportar(df_show, base_nome="pacientes",
+                                    titulo_pdf="Histórico de Pacientes",
+                                    subtitulo_pdf=f"{len(df_show)} consulta(s)",
+                                    key_prefix="pac")
                 else:
                     st.info("Nenhum histórico ainda.")
             except:
@@ -1190,6 +1267,14 @@ else:
                     st.dataframe(df_cancel.rename(columns={"data":"Data","horario":"Horário","paciente_nome":"Paciente","status":"Status"}), hide_index=True, use_container_width=True)
                 else:
                     st.success("Nenhum cancelamento no período! 🎉")
+                # Exportação do relatório completo do período
+                st.markdown("##### 📤 Exportar relatório do período")
+                cols_rel = [c for c in ["data","horario","paciente_nome","telefone","status"] if c in df_rel.columns]
+                df_export = df_rel[cols_rel].rename(columns={"data":"Data","horario":"Horário","paciente_nome":"Paciente","telefone":"Telefone","status":"Status"})
+                botoes_exportar(df_export, base_nome="relatorio_consultas",
+                                titulo_pdf="Relatório de Consultas",
+                                subtitulo_pdf=f"Período: {_periodo_txt}",
+                                key_prefix="rel")
             else:
                 st.info("Sem dados de agenda no período selecionado.")
 
@@ -1419,6 +1504,14 @@ else:
                                         if dias_val<7: alerta_icon="🔴"
                                     except: pass
                                 st.markdown(f"""<div style="background:white;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px;margin-bottom:8px;"><div style="font-weight:500;font-size:0.9rem;">{alerta_icon} {item['nome']}</div><div style="font-size:0.78rem;color:#64748b;">Qtd: {item['quantidade']} · Mín: {item['minimo']}{val_str}</div></div>""", unsafe_allow_html=True)
+                            st.markdown("###### 📤 Exportar estoque")
+                            df_inv = pd.DataFrame(inv.data)
+                            cols_inv = [c for c in ["nome","quantidade","minimo","validade"] if c in df_inv.columns]
+                            df_inv_exp = df_inv[cols_inv].rename(columns={"nome":"Material","quantidade":"Quantidade","minimo":"Mínimo","validade":"Validade"})
+                            botoes_exportar(df_inv_exp, base_nome="inventario",
+                                            titulo_pdf="Inventário de Materiais",
+                                            subtitulo_pdf=f"{len(df_inv_exp)} item(ns)",
+                                            key_prefix="inv")
                         else: st.info("Nenhum material cadastrado.")
                     except: st.info("Crie a tabela inventario no Supabase.")
 
