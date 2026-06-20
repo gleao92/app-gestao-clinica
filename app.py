@@ -578,15 +578,21 @@ else:
         .stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"] { background: white !important; }
         /* Form de login sem fundo cinza próprio, fundindo com o card branco */
         [data-testid="stForm"] { background: white !important; border:none !important; }
-        /* Campos de E-mail e Senha brancos com borda sutil (em vez do cinza padrão) */
-        [data-testid="stForm"] .stTextInput input,
-        [data-testid="stForm"] [data-baseweb="input"],
-        [data-testid="stForm"] [data-baseweb="base-input"] {
-            background: white !important;
+        /* Força branco em QUALQUER input/caixa dentro da tela de login,
+           cobrindo todas as variações internas do Streamlit/BaseWeb. */
+        .stApp input,
+        .stApp .stTextInput > div,
+        .stApp .stTextInput > div > div,
+        .stApp div[data-baseweb="input"],
+        .stApp div[data-baseweb="input"] > div,
+        .stApp div[data-baseweb="base-input"] {
+            background-color: #ffffff !important;
+            background: #ffffff !important;
+        }
+        .stApp .stTextInput > div > div {
             border: 1px solid #e2e8f0 !important;
             border-radius: 10px !important;
         }
-        [data-testid="stForm"] [data-baseweb="input"] input { background: white !important; }
         </style>
         """, unsafe_allow_html=True)
 
