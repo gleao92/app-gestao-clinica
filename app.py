@@ -593,6 +593,20 @@ else:
             border: 1px solid #e2e8f0 !important;
             border-radius: 10px !important;
         }
+        /* Container raiz do input (visto no DevTools: stTextInputRootElement) */
+        .stApp [data-testid="stTextInputRootElement"],
+        .stApp [data-testid="stTextInputRootElement"] > div,
+        .stApp [data-baseweb="input"] {
+            background-color: #ffffff !important;
+        }
+        /* Labels (E-mail / Senha) e seus containers — remover faixa cinza */
+        .stApp [data-testid="stWidgetLabel"],
+        .stApp [data-testid="stWidgetLabel"] > div,
+        .stApp .stTextInput label,
+        .stApp .stTextInput > label {
+            background: transparent !important;
+            background-color: transparent !important;
+        }
         </style>
         """, unsafe_allow_html=True)
 
