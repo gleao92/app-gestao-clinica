@@ -974,50 +974,49 @@ else:
             # ── ABA 3: ADICIONAR PACIENTE ─────────────────────────
             with aba_ag[2]:
                 st.markdown("#### ➕ Adicionar paciente na agenda")
-                # Data do agendamento — fora do form, para os horários livres
-                # recalcularem automaticamente quando o usuário muda o dia.
-                np_data = st.date_input("📅 Data da consulta*", value=data_sel, format="DD/MM/YYYY", key="np_data")
-                np_data_str = np_data.isoformat()
-
-                # Busca consultas já ocupadas NA DATA escolhida (que pode ser diferente
-                # da data do seletor do topo), para calcular os horários livres corretos.
-                if np_data == data_sel:
-                    ocupados_dia = set(agenda_map.keys())
-                else:
-                    _ocup_resp = db.table("agenda").select("horario").eq("clinica_id", cid).eq("data", np_data_str).execute()
-                    ocupados_dia = {str(r.get("horario",""))[:5] for r in (_ocup_resp.data or [])}
-
-                horarios_livres = [h for h in [f"{x:02d}:00" for x in range(7,20)] if h not in ocupados_dia]
-
                 with st.form("form_novo_paciente"):
                     col_np1, col_np2 = st.columns(2)
                     with col_np1:
                         np_nome = st.text_input("Nome do paciente*", placeholder="Ex: Maria Silva")
                         np_tel  = st.text_input("WhatsApp (com DDD)*", placeholder="Ex: 62999990000")
                     with col_np2:
-                        np_hora   = st.selectbox("Horário*", horarios_livres if horarios_livres else ["Sem horários livres"])
+                        col_data_np, col_hora_np = st.columns(2)
+                        with col_data_np:
+                            np_data = st.date_input("Data*", value=data_sel, format="DD/MM/YYYY", key="np_data")
+                        with col_hora_np:
+                            todos_horarios = [f"{x:02d}:00" for x in range(7,20)]
+                            np_hora = st.selectbox("Horário*", todos_horarios)
                         np_status = st.selectbox("Status inicial:", ["Pendente","Confirmado"])
                     np_ok = st.form_submit_button("✅ Adicionar à agenda", type="primary", use_container_width=True)
                     if np_ok:
-                        if np_nome and np_tel and horarios_livres:
-                            try:
-                                db.table("agenda").insert({
-                                    "clinica_id": cid,
-                                    "paciente_nome": np_nome,
-                                    "telefone": np_tel,
-                                    "horario": np_hora,
-                                    "status": np_status,
-                                    "data": np_data_str
-                                }).execute()
-                                _quando = "hoje" if np_data == _date.today() else f"em {np_data.strftime('%d/%m/%Y')}"
-                                st.success(f"✅ {np_nome} adicionado às {np_hora} ({_quando})!")
-                                if np_status == "Confirmado":
-                                    disparar_whatsapp(np_nome, np_tel, f"Olá {np_nome}! Sua consulta foi agendada para {_quando} às {np_hora}.")
-                                time.sleep(1); st.rerun()
-                            except Exception as e:
-                                st.error(f"Erro: {e}")
+                        np_data_str = np_data.isoformat()
+                        if not (np_nome and np_tel):
+                            st.warning("Preencha nome e telefone.")
                         else:
-                            st.warning("Preencha nome e telefone." if np_nome else "Sem horários livres.")
+                            # Valida se o horário já está ocupado naquela data
+                            try:
+                                conflito = db.table("agenda").select("id").eq("clinica_id", cid).eq("data", np_data_str).eq("horario", np_hora).execute()
+                            except Exception:
+                                conflito = None
+                            if conflito and conflito.data:
+                                st.error(f"⚠️ Já existe uma consulta em {np_data.strftime('%d/%m/%Y')} às {np_hora}. Escolha outro horário ou data.")
+                            else:
+                                try:
+                                    db.table("agenda").insert({
+                                        "clinica_id": cid,
+                                        "paciente_nome": np_nome,
+                                        "telefone": np_tel,
+                                        "horario": np_hora,
+                                        "status": np_status,
+                                        "data": np_data_str
+                                    }).execute()
+                                    _quando = "hoje" if np_data == _date.today() else f"em {np_data.strftime('%d/%m/%Y')}"
+                                    st.success(f"✅ {np_nome} adicionado às {np_hora} ({_quando})!")
+                                    if np_status == "Confirmado":
+                                        disparar_whatsapp(np_nome, np_tel, f"Olá {np_nome}! Sua consulta foi agendada para {_quando} às {np_hora}.")
+                                    time.sleep(1); st.rerun()
+                                except Exception as e:
+                                    st.error(f"Erro: {e}")
 
             # ── ABA 4: RECUPERADOR ────────────────────────────────
             with aba_ag[3]:
