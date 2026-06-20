@@ -339,13 +339,22 @@ elif st.query_params.get("view") == "confirmar":
             consulta = supabase.table("agenda").select("*").eq("id", agenda_id).execute()
             if consulta.data:
                 c = consulta.data[0]
+                # Formata a data da consulta, se existir
+                _data_consulta_txt = ""
+                if c.get("data"):
+                    try:
+                        _dt = datetime.strptime(str(c["data"])[:10], "%Y-%m-%d")
+                        _dias = ["segunda","terça","quarta","quinta","sexta","sábado","domingo"]
+                        _data_consulta_txt = f"{_dias[_dt.weekday()]}, {_dt.strftime('%d/%m/%Y')} às "
+                    except Exception:
+                        _data_consulta_txt = ""
                 st.markdown(f"""
                 <div style="text-align:center;padding:2rem;background:white;border-radius:20px;border:1px solid #e2e8f0;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
                     <div style="font-size:3rem;">📅</div>
                     <h2 style="color:#0f172a;margin:1rem 0 0.5rem;">Confirmar Consulta</h2>
                     <p style="color:#64748b;">Olá, <strong>{c['paciente_nome']}</strong>!</p>
                     <div style="background:#f1f5f9;border-radius:12px;padding:1rem;margin:1.5rem 0;">
-                        <p style="margin:0;font-size:1.1rem;color:#1e293b;">🕐 <strong>{c['horario']}</strong></p>
+                        <p style="margin:0;font-size:1.1rem;color:#1e293b;">🕐 <strong>{_data_consulta_txt}{c['horario']}</strong></p>
                     </div>
                     <p style="color:#64748b;font-size:0.9rem;">Confirme sua presença clicando abaixo.</p>
                 </div>
@@ -757,10 +766,14 @@ else:
             # KPIs com dados reais + skeleton loading
             with st.spinner("Carregando métricas..."):
                 try:
-                    ag_resp  = db.table("agenda").select("*").eq("clinica_id", cid).execute()
+                    hoje_str = datetime.now().strftime("%Y-%m-%d")
+                    # Agenda de HOJE (consultas, confirmados, cancelados são do dia)
+                    ag_resp  = db.table("agenda").select("*").eq("clinica_id", cid).eq("data", hoje_str).execute()
                     ag_data  = ag_resp.data or []
                     fila_kpi = db.table("fila_espera").select("*").eq("clinica_id", cid).execute()
-                    hist_kpi = db.table("historico_consultas").select("*").eq("clinica_id", cid).execute()
+                    # Encaixes do mês corrente (métrica acumulada, não só do dia)
+                    inicio_mes = datetime.now().replace(day=1).strftime("%Y-%m-%d")
+                    hist_kpi = db.table("historico_consultas").select("*").eq("clinica_id", cid).gte("data", inicio_mes).execute()
 
                     total_ag   = len(ag_data)
                     confirmados = len([a for a in ag_data if a.get("status") == "Confirmado"])
@@ -774,7 +787,7 @@ else:
                     c1.metric("Consultas hoje",       total_ag,    f"{confirmados} confirmadas")
                     c2.metric("Taxa de cancelamento", taxa_cancel, f"{cancelados} canceladas", delta_color="inverse")
                     c3.metric("Na fila de espera",    na_fila,     "aguardando vaga")
-                    c4.metric("Encaixes realizados",  encaixes,    "via substituição automática")
+                    c4.metric("Encaixes (mês)",       encaixes,    "via substituição automática")
                 except Exception as e:
                     st.warning(f"Erro ao carregar métricas: {e}")
                     c1,c2,c3,c4 = st.columns(4)
@@ -845,9 +858,35 @@ else:
 
         # ── AGENDA ─────────────────────────────────────────────────
         elif menu == "📅 Agenda":
+            # Seletor de data — permite ver e gerenciar a agenda de qualquer dia
+            from datetime import date as _date
+            col_data, col_nav1, col_nav2, col_nav3 = st.columns([2, 1, 1, 1])
+            with col_data:
+                data_sel = st.date_input("📅 Data da agenda", value=_date.today(), format="DD/MM/YYYY")
+            with col_nav1:
+                st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+                if st.button("◀ Dia anterior", use_container_width=True):
+                    st.session_state["_agenda_data"] = (data_sel - timedelta(days=1)).isoformat()
+                    st.rerun()
+            with col_nav2:
+                st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+                if st.button("Hoje", use_container_width=True):
+                    st.session_state["_agenda_data"] = _date.today().isoformat()
+                    st.rerun()
+            with col_nav3:
+                st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+                if st.button("Próximo dia ▶", use_container_width=True):
+                    st.session_state["_agenda_data"] = (data_sel + timedelta(days=1)).isoformat()
+                    st.rerun()
+
+            # Se os botões de navegação foram usados, eles têm prioridade sobre o date_input
+            if "_agenda_data" in st.session_state:
+                data_sel = _date.fromisoformat(st.session_state.pop("_agenda_data"))
+            data_str = data_sel.isoformat()
+
             # Skeleton loading
             with st.spinner("Carregando agenda..."):
-                agenda_resp = db.table("agenda").select("*").eq("clinica_id", cid).execute()
+                agenda_resp = db.table("agenda").select("*").eq("clinica_id", cid).eq("data", data_str).execute()
                 agenda_df   = pd.DataFrame(agenda_resp.data) if agenda_resp.data else pd.DataFrame()
                 fila_resp   = db.table("fila_espera").select("*").eq("clinica_id", cid).order("posicao").execute()
                 fila        = fila_resp.data or []
@@ -857,7 +896,8 @@ else:
 
             # ── ABA 1: GRADE HORÁRIA ──────────────────────────────
             with aba_ag[0]:
-                st.markdown("#### 🗓️ Grade de hoje")
+                _label_dia = "hoje" if data_sel == _date.today() else data_sel.strftime("%d/%m/%Y")
+                st.markdown(f"#### 🗓️ Grade de {_label_dia}")
                 horarios = [f"{h:02d}:00" for h in range(7, 20)]
                 agenda_map = {}
                 if not agenda_df.empty:
@@ -922,13 +962,14 @@ else:
                     pendentes = agenda_df[agenda_df["status"] != "Confirmado"]
                     st.caption(f"{len(pendentes)} consulta(s) sem confirmação")
                     if st.button("📨 Enviar lembrete para todos os pendentes", type="primary"):
+                        _quando_lembrete = "hoje" if data_sel == _date.today() else f"dia {data_sel.strftime('%d/%m')}"
                         for _, row in pendentes.iterrows():
                             tel = row.get("telefone","")
                             if tel:
-                                disparar_whatsapp(row["paciente_nome"], tel, f"Olá {row['paciente_nome']}! Lembrete: consulta amanhã às {row['horario']}.")
+                                disparar_whatsapp(row["paciente_nome"], tel, f"Olá {row['paciente_nome']}! Lembrete: consulta {_quando_lembrete} às {row['horario']}.")
                         st.success(f"✅ Lembretes enviados!")
                 else:
-                    st.info("Nenhuma consulta agendada para hoje.")
+                    st.info("Nenhuma consulta agendada para esta data.")
 
             # ── ABA 3: ADICIONAR PACIENTE ─────────────────────────
             with aba_ag[2]:
@@ -952,11 +993,13 @@ else:
                                     "paciente_nome": np_nome,
                                     "telefone": np_tel,
                                     "horario": np_hora,
-                                    "status": np_status
+                                    "status": np_status,
+                                    "data": data_str
                                 }).execute()
-                                st.success(f"✅ {np_nome} adicionado às {np_hora}!")
+                                _quando = "hoje" if data_sel == _date.today() else f"em {data_sel.strftime('%d/%m/%Y')}"
+                                st.success(f"✅ {np_nome} adicionado às {np_hora} ({_quando})!")
                                 if np_status == "Confirmado":
-                                    disparar_whatsapp(np_nome, np_tel, f"Olá {np_nome}! Sua consulta foi agendada para hoje às {np_hora}.")
+                                    disparar_whatsapp(np_nome, np_tel, f"Olá {np_nome}! Sua consulta foi agendada para {_quando} às {np_hora}.")
                                 time.sleep(1); st.rerun()
                             except Exception as e:
                                 st.error(f"Erro: {e}")
@@ -981,11 +1024,12 @@ else:
                                 sub = fila[0]
                                 linha_cancelada = agenda_df.loc[agenda_df["id"] == id_cancelar].iloc[0]
                                 horario = linha_cancelada["horario"]
+                                data_consulta = linha_cancelada.get("data", data_str)
                                 db.table("agenda").delete().eq("id", id_cancelar).eq("clinica_id", cid).execute()
-                                db.table("agenda").insert({"clinica_id":cid,"horario":horario,"paciente_nome":sub["paciente_nome"],"status":"Confirmado","telefone":sub.get("telefone","")}).execute()
+                                db.table("agenda").insert({"clinica_id":cid,"horario":horario,"paciente_nome":sub["paciente_nome"],"status":"Confirmado","telefone":sub.get("telefone",""),"data":data_consulta}).execute()
                                 db.table("fila_espera").delete().eq("id",sub["id"]).execute()
                                 try:
-                                    db.table("historico_consultas").insert({"clinica_id":cid,"paciente_nome":sub["paciente_nome"],"telefone":sub["telefone"],"horario":horario,"data":datetime.now().strftime("%Y-%m-%d"),"origem":"Encaixe via fila"}).execute()
+                                    db.table("historico_consultas").insert({"clinica_id":cid,"paciente_nome":sub["paciente_nome"],"telefone":sub["telefone"],"horario":horario,"data":data_consulta,"origem":"Encaixe via fila"}).execute()
                                 except: pass
                                 disparar_whatsapp(sub["paciente_nome"], sub["telefone"], f"Olá {sub['paciente_nome']}! Um horário vagou às {horario}. Você foi encaixado!")
                                 st.success(f"✅ {sub['paciente_nome']} encaixado às {horario}!")
@@ -1066,9 +1110,21 @@ else:
 
         # ── RELATÓRIOS ─────────────────────────────────────────────
         elif menu == "📋 Relatórios":
-            st.markdown("### 📋 Relatório de Cancelamentos")
-            agenda_resp = db.table("agenda").select("*").eq("clinica_id", cid).execute()
+            from datetime import date as _date
+            st.markdown("### 📋 Relatório de Consultas")
+            # Filtro de período
+            col_p1, col_p2 = st.columns(2)
+            with col_p1:
+                data_ini = st.date_input("De:", value=_date.today().replace(day=1), format="DD/MM/YYYY", key="rel_ini")
+            with col_p2:
+                data_fim = st.date_input("Até:", value=_date.today(), format="DD/MM/YYYY", key="rel_fim")
+            if data_ini > data_fim:
+                st.warning("A data inicial não pode ser maior que a final.")
+                st.stop()
+            agenda_resp = db.table("agenda").select("*").eq("clinica_id", cid).gte("data", data_ini.isoformat()).lte("data", data_fim.isoformat()).execute()
             df_rel = pd.DataFrame(agenda_resp.data)
+            _periodo_txt = "hoje" if (data_ini == data_fim == _date.today()) else f"{data_ini.strftime('%d/%m/%Y')} a {data_fim.strftime('%d/%m/%Y')}"
+            st.caption(f"Período: {_periodo_txt}")
             if not df_rel.empty:
                 col_r1,col_r2,col_r3 = st.columns(3)
                 total = len(df_rel)
@@ -1082,13 +1138,14 @@ else:
                 df_status = df_rel.groupby("status").size().reset_index(name="Quantidade").set_index("status")
                 st.bar_chart(df_status)
                 st.markdown("#### Detalhe dos cancelamentos")
-                df_cancel = df_rel[df_rel["status"]=="Cancelado"][["horario","paciente_nome","status"]]
+                cols_cancel = [c for c in ["data","horario","paciente_nome","status"] if c in df_rel.columns]
+                df_cancel = df_rel[df_rel["status"]=="Cancelado"][cols_cancel]
                 if not df_cancel.empty:
-                    st.dataframe(df_cancel.rename(columns={"horario":"Horário","paciente_nome":"Paciente","status":"Status"}), hide_index=True, use_container_width=True)
+                    st.dataframe(df_cancel.rename(columns={"data":"Data","horario":"Horário","paciente_nome":"Paciente","status":"Status"}), hide_index=True, use_container_width=True)
                 else:
-                    st.success("Nenhum cancelamento registrado hoje! 🎉")
+                    st.success("Nenhum cancelamento no período! 🎉")
             else:
-                st.info("Sem dados de agenda para gerar relatório.")
+                st.info("Sem dados de agenda no período selecionado.")
 
         # ── DOCUMENTOS ─────────────────────────────────────────────
         elif menu == "📄 Documentos":
