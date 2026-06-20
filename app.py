@@ -618,6 +618,28 @@ else:
             </div>
             """, unsafe_allow_html=True)
 
+            # Marcador para estilizar SÓ a coluna do login (não afeta o painel interno)
+            st.markdown('<span id="login-col-anchor"></span>', unsafe_allow_html=True)
+            st.markdown("""
+            <style>
+              /* Sobe do âncora até o bloco vertical da coluna direita do login
+                 e pinta o fundo de branco, para o form não mostrar o cinza do app.
+                 :has() é suportado nos navegadores atuais (Chrome/Edge/Safari/Firefox). */
+              div[data-testid="stVerticalBlock"]:has(> div #login-col-anchor),
+              div[data-testid="stVerticalBlock"]:has(#login-col-anchor) [data-testid="stForm"] {
+                background: white !important;
+              }
+              /* Remove borda e padding padrão do form de login para fundir com o card */
+              div[data-testid="stVerticalBlock"]:has(#login-col-anchor) [data-testid="stForm"] {
+                border: none !important;
+                box-shadow: 0 20px 60px rgba(0,0,0,0.12) !important;
+                border-radius: 0 !important;
+                padding: 0 2.4rem 0.5rem 2.4rem !important;
+                margin-top: -1rem !important;
+              }
+            </style>
+            """, unsafe_allow_html=True)
+
             with st.form("login"):
                 email = st.text_input("E-mail", placeholder="seu@email.com")
                 senha = st.text_input("Senha", placeholder="••••••••", type="password")
