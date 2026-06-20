@@ -2,3 +2,5 @@ streamlit
 supabase
 pandas
 requests
+openpyxl
+fpdf2
