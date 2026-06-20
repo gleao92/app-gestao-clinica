@@ -573,6 +573,11 @@ else:
         .login-subtitle { font-size:0.85rem;color:#64748b;margin-bottom:1.6rem;font-family:'DM Sans',sans-serif; }
         .login-badges { display:flex;gap:8px;flex-wrap:wrap;margin-top:1rem; }
         .login-badge { display:flex;align-items:center;gap:5px;background:#f1f5f9;border-radius:99px;padding:4px 10px;font-size:0.72rem;color:#475569;font-family:'DM Sans',sans-serif; }
+        /* Fundo branco em toda a tela de login (este <style> só é renderizado
+           na tela de login, então o painel interno mantém o fundo cinza). */
+        .stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"] { background: white !important; }
+        /* Form de login sem fundo cinza próprio, fundindo com o card branco */
+        [data-testid="stForm"] { background: white !important; border:none !important; }
         </style>
         """, unsafe_allow_html=True)
 
@@ -616,28 +621,6 @@ else:
               <div style="font-size:0.85rem;color:#64748b;margin-bottom:0.5rem;
               font-family:'DM Sans',sans-serif;">Acesse o painel da sua clínica</div>
             </div>
-            """, unsafe_allow_html=True)
-
-            # Marcador para estilizar SÓ a coluna do login (não afeta o painel interno)
-            st.markdown('<span id="login-col-anchor"></span>', unsafe_allow_html=True)
-            st.markdown("""
-            <style>
-              /* Sobe do âncora até o bloco vertical da coluna direita do login
-                 e pinta o fundo de branco, para o form não mostrar o cinza do app.
-                 :has() é suportado nos navegadores atuais (Chrome/Edge/Safari/Firefox). */
-              div[data-testid="stVerticalBlock"]:has(> div #login-col-anchor),
-              div[data-testid="stVerticalBlock"]:has(#login-col-anchor) [data-testid="stForm"] {
-                background: white !important;
-              }
-              /* Remove borda e padding padrão do form de login para fundir com o card */
-              div[data-testid="stVerticalBlock"]:has(#login-col-anchor) [data-testid="stForm"] {
-                border: none !important;
-                box-shadow: 0 20px 60px rgba(0,0,0,0.12) !important;
-                border-radius: 0 !important;
-                padding: 0 2.4rem 0.5rem 2.4rem !important;
-                margin-top: -1rem !important;
-              }
-            </style>
             """, unsafe_allow_html=True)
 
             with st.form("login"):
